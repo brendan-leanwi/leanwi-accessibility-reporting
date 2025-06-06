@@ -6,12 +6,15 @@ function leanwi_render_site_scan_page() {
     $rule_filter = isset($_GET['rule']) ? sanitize_text_field($_GET['rule']) : '';
 
     echo '<div class="wrap"><h1>Site Scan Summary</h1>';
+    echo '<p style="margin-bottom: 2em; margin-top: 2em; font-size: 1.2em;">
+            <strong>PLEASE NOTE: Accessibility changes made to your pages will not appear on this page until you make a new snapshot.</strong><br>
+            Use the <a href="#leanwi-snapshot-note">Make a Snapshot</a> button at the bottom of this page to include your most recent changes in the following reports.</p>';
 
     // --- Snapshot selection form and comparison results ---
 
     // Fetch all snapshots ordered by newest first
     $snapshot_table = "{$wpdb->prefix}leanwi_snapshot";
-    $snapshots = $wpdb->get_results("SELECT id, snapshot_date FROM $snapshot_table ORDER BY snapshot_date DESC");
+    $snapshots = $wpdb->get_results("SELECT id, snapshot_date, snapshot_note FROM $snapshot_table ORDER BY snapshot_date DESC");
 
     // Determine pre-checked snapshot IDs (last two)
     $prechecked_ids = [];
@@ -27,19 +30,27 @@ function leanwi_render_site_scan_page() {
         : $prechecked_ids;
 
     // Render the snapshot selection form
-    echo '<form method="GET" action="' . admin_url('admin.php') . '" style="margin-bottom: 2em;">';
+    echo '<form method="GET" action="' . esc_url(admin_url('admin.php')) . '" style="margin-bottom: 2em;">';
     echo '<input type="hidden" name="page" value="leanwi-site-scan">';
     echo '<h2>Select Two Snapshots to Compare</h2>';
+    echo '<div style="border: 1px solid #ccc; padding: 1em; border-radius: 8px; background: #f9f9f9;">';
+
     foreach ($snapshots as $snapshot) {
         $checked = in_array($snapshot->id, $selected_snapshots) ? 'checked' : '';
-        echo '<label style="display:block; margin-bottom:4px;">';
-        echo '<input type="checkbox" name="compare_snapshots[]" value="' . esc_attr($snapshot->id) . '" ' . $checked . ' />';
-        echo ' Snapshot #' . esc_html($snapshot->id) . ' - ' . esc_html($snapshot->snapshot_date);
+        echo '<label style="display: block; margin-bottom: 12px; padding: 8px; background: #fff; border: 1px solid #ddd; border-radius: 4px;">';
+        echo '<input type="checkbox" name="compare_snapshots[]" value="' . esc_attr($snapshot->id) . '" ' . $checked . ' style="margin-right: 10px;" />';
+        echo '<strong>Snapshot #' . esc_html($snapshot->id) . '</strong> — ' . esc_html(date('F j, Y, g:i a', strtotime($snapshot->snapshot_date)));
+        if (!empty($snapshot->snapshot_note)) {
+            echo '<br><span style="color: #555; font-style: italic;">' . esc_html($snapshot->snapshot_note) . '</span>';
+        }
         echo '</label>';
     }
-    echo '<p><small>Select exactly two snapshots.</small></p>';
+
+    echo '</div>';
+    echo '<p>Please select exactly two snapshots to compare.</p>';
     echo '<button type="submit" class="button button-primary">Compare Snapshots</button>';
     echo '</form>';
+
 
     // If exactly two snapshots selected, run comparison query and display results
     if (count($selected_snapshots) === 2) {
@@ -212,8 +223,14 @@ function leanwi_render_site_scan_page() {
 
     echo '</div>';
     echo '<div style="margin-top:2em;">';
-    echo '<button id="leanwi-make-snapshot" class="button button-secondary">Make a Snapshot</button>';
-    echo '<span id="leanwi-snapshot-spinner" class="spinner" style="float: none; margin-left: 1em; visibility: hidden;"></span>';
-    echo '<span id="leanwi-snapshot-status" style="margin-left: 1em;"></span>';
+    echo '<p>
+            <label for="leanwi-snapshot-note">Snapshot Note:</label><br>
+            <input type="text" id="leanwi-snapshot-note" name="snapshot_note" style="width: 100%; max-width: 400px;" placeholder="Enter an optional note before making a snapshot..." />
+          </p>';
+    echo '<p>
+            <button id="leanwi-make-snapshot" class="button button-secondary">Make a Snapshot</button>
+            <span id="leanwi-snapshot-spinner" class="spinner" style="float: none; margin-left: 1em; visibility: hidden;"></span>
+          </p>';
+    echo '<p id="leanwi-snapshot-status" style="margin-left: 1em;"></p>';
     echo '</div>';
 }

@@ -1,4 +1,7 @@
 <?php
+
+namespace LeanwiAccessibility;
+
 // Exit if accessed directly
 if (!defined('ABSPATH')) {
     exit;
@@ -19,6 +22,7 @@ function leanwi_accessibility_create_tables() {
         CREATE TABLE IF NOT EXISTS $snapshot_table (
             id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
             snapshot_date timestamp DEFAULT CURRENT_TIMESTAMP,
+            snapshot_note mediumtext NULL,
             PRIMARY KEY (id)
         ) $engine $charset_collate;
     ";
@@ -80,5 +84,5 @@ function leanwi_accessibility_create_tables() {
  * Hook the function to run on plugin activation.
  */
 function leanwi_accessibility_register_activation_hook() {
-    register_activation_hook(__FILE__, 'leanwi_accessibility_create_tables');
+    register_activation_hook(__FILE__, __NAMESPACE__ . '\\leanwi_accessibility_create_tables');
 }

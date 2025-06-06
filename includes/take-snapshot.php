@@ -3,6 +3,17 @@
 function leanwi_take_accessibility_snapshot() {
     global $wpdb;
 
+    $note = '';
+    if (isset($_POST['snapshot_note'])) {
+        $note = sanitize_text_field($_POST['snapshot_note']);
+    } elseif (isset($_REQUEST['snapshot_note'])) {
+        $note = sanitize_text_field($_REQUEST['snapshot_note']);
+    }
+
+    if (empty($note)) {
+        $note = 'Snapshot created without note';
+    }
+
     $src_table = "{$wpdb->prefix}accessibility_checker";
     $dest_table = "{$wpdb->prefix}leanwi_accessibility_checker_snapshot";
     $snapshot_table = "{$wpdb->prefix}leanwi_snapshot";
@@ -10,7 +21,10 @@ function leanwi_take_accessibility_snapshot() {
     $wpdb->query('START TRANSACTION');
     // 3. Insert one record into leanwi_snapshot
     try {
-        $wpdb->query("INSERT INTO $snapshot_table (snapshot_date) VALUES (DEFAULT)");
+        $inserted = $wpdb->query($wpdb->prepare(
+            "INSERT INTO $snapshot_table (snapshot_date, snapshot_note) VALUES (DEFAULT, %s)",
+            $note
+        ));
         $snapshot_id = $wpdb->insert_id;
 
         if ($wpdb->last_error) {
@@ -19,7 +33,7 @@ function leanwi_take_accessibility_snapshot() {
             return new WP_REST_Response(['message' => 'Failed to create snapshot record'], 500);
         }
 
-        if (!$snapshot_id) {
+        if (!$inserted || !$snapshot_id) {
             $wpdb->query('ROLLBACK');
             return new WP_REST_Response(['message' => 'Failed to create snapshot record'], 500);
         }

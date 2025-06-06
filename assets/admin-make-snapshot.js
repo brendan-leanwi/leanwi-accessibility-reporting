@@ -14,6 +14,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const button = document.getElementById("leanwi-make-snapshot");
   const status = document.getElementById("leanwi-snapshot-status");
   const spinner = document.getElementById("leanwi-snapshot-spinner");
+  const noteInput = document.getElementById("leanwi-snapshot-note");
 
   if (button) {
     button.addEventListener("click", function () {
@@ -27,11 +28,12 @@ document.addEventListener("DOMContentLoaded", () => {
         body: new URLSearchParams({
           action: "leanwi_take_snapshot",
           nonce: leanwiAccessibility.nonce,
+          snapshot_note: noteInput ? noteInput.value : '',
         }),
       })
         .then((response) => response.json())
         .then((data) => {
-          status.textContent = data.message || "Snapshot complete.";
+          status.textContent = data.message || "Snapshot complete. Please wait while the page refreshes...";
           status.style.color = "green";
           spinner.style.visibility = "hidden";
           location.reload();

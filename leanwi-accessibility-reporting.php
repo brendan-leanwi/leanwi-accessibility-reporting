@@ -1,10 +1,13 @@
 <?php
+
+namespace LeanwiAccessibility;
+
 /*
 Plugin Name: LEANWI Accessibility Reporting
 GitHub URI:   https://github.com/brendan-leanwi/leanwi-accessibility-reporting
 Update URI:   https://github.com/brendan-leanwi/leanwi-accessibility-reporting
-Description: Functionality to aid reporting on accessibility for the entire site.
-Version: 1.0
+Description: Functionality to aid reporting on accessibility for your entire site.
+Version: 1.0.1
 Author: Brendan Tuckey
 Author URI:   https://github.com/brendan-leanwi
 License:      GPL2
@@ -22,9 +25,26 @@ require_once LEANWI_AR_PATH . 'includes/db-setup.php';
 require_once LEANWI_AR_PATH . 'includes/render-site-scan-page.php';
 require_once LEANWI_AR_PATH . 'includes/take-snapshot.php';
 require_once LEANWI_AR_PATH . 'includes/routes.php';
+require_once LEANWI_AR_PATH . 'includes/plugin-updater.php';
 
 // Register activation hook to create database tables
-register_activation_hook( __FILE__, 'leanwi_accessibility_create_tables' );
+register_activation_hook( __FILE__, __NAMESPACE__ . '\\leanwi_accessibility_create_tables' );
+
+// Version-based update check
+function leanwi_update_check() {
+    $current_version = get_option('leanwi_accessibility_reporting_plugin_version', '1.0.0'); // Default to an old version if not set
+    $new_version = '1.0.1'; // Update this with the new plugin version
+
+    if (version_compare($current_version, $new_version, '<')) {
+        // Run the table creation logic
+        leanwi_accessibility_create_tables();
+
+        // Update the version in the database
+        update_option('leanwi_accessibility_reporting_plugin_version', $new_version);
+    }
+}
+add_action('admin_init', __NAMESPACE__ . '\\leanwi_update_check');
+
 
 add_action('admin_menu', function () {
     add_submenu_page(
@@ -54,5 +74,5 @@ function leanwi_accessibility_enqueue_admin_scripts($hook) {
         ]);
     }
 }
-add_action('admin_enqueue_scripts', 'leanwi_accessibility_enqueue_admin_scripts');
+add_action('admin_enqueue_scripts', __NAMESPACE__ . '\\leanwi_accessibility_enqueue_admin_scripts');
 
