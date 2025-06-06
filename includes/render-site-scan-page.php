@@ -159,7 +159,9 @@ function leanwi_render_site_scan_page() {
             echo '<table class="widefat"><thead><tr><th>Page</th><th>Violations</th><th>Ignored</th></tr></thead><tbody>';
             foreach ($results as $row) {
                 $edit_link = get_edit_post_link($row->ID);
-                echo '<tr>';
+                $highlight = ($row->ignre_status === 'Yes') ? 'style="background-color: #ffd43b;"' : '';
+                
+                echo '<tr ' . $highlight . '>';
                 echo '<td><a href="' . esc_url($edit_link) . '">' . esc_html($row->post_title) . '</a></td>';
                 echo '<td>' . intval($row->count) . '</td>';
                 echo '<td>' . esc_html($row->ignre_status) . '</td>';
