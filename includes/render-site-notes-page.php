@@ -194,6 +194,7 @@ function leanwi_render_site_notes_page() {
 
         if ($notes) {
             echo '<h3>Matching Notes</h3>';
+            // Code to display the notes in a text area
             echo '<textarea rows="20" style="width:100%; font-family:monospace;">';
             foreach ($notes as $note) {
                 $meta = [];
@@ -206,9 +207,27 @@ function leanwi_render_site_notes_page() {
                 if ($note->other_pertaining_to) $meta[] = "Other: $note->other_pertaining_to";
 
                 echo "* " . implode(" | ", $meta) . " (" . $note->note_date . ")\n";
-                echo strip_tags($note->snapshot_note) . "\n\n";
+                echo wp_strip_all_tags(stripslashes($note->snapshot_note)) . "\n\n";
             }
             echo '</textarea>';
+
+            /* Code to display the notes just on the page (maybe a future change?)
+            echo '<div style="max-height: 600px; overflow-y: auto; font-family: monospace;">';
+            foreach ($notes as $note) {
+                $meta = [];
+                if ($note->entry_user) $meta[] = "User: $note->entry_user";
+                if ($note->rule_pertaining_to) $meta[] = "Rule: $note->rule_pertaining_to";
+                if ($note->post_pertaining_to) {
+                    $post_title = get_the_title((int) $note->post_pertaining_to);
+                    $meta[] = "Post: $post_title";
+                }
+                if ($note->other_pertaining_to) $meta[] = "Other: $note->other_pertaining_to";
+
+                echo '<p><em>* ' . esc_html(implode(" | ", $meta)) . ' (' . esc_html($note->note_date) . ')</em><br>';
+                echo nl2br(esc_html(stripslashes($note->snapshot_note))) . "</p>\n";
+            }
+            echo '</div>';
+            */
         } else {
             echo '<p>No notes found matching that criteria.</p>';
         }
