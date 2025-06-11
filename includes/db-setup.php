@@ -17,6 +17,7 @@ function leanwi_accessibility_create_tables() {
     $engine = "ENGINE=InnoDB";
     $data_table = $wpdb->prefix . 'leanwi_accessibility_checker_snapshot';
     $snapshot_table = "{$wpdb->prefix}leanwi_snapshot";
+    $notes_table = "{$wpdb->prefix}leanwi_accessibility_notes";
 
     $sql_snapshot = "
         CREATE TABLE IF NOT EXISTS $snapshot_table (
@@ -24,6 +25,20 @@ function leanwi_accessibility_create_tables() {
             snapshot_date timestamp DEFAULT CURRENT_TIMESTAMP,
             snapshot_note mediumtext NULL,
             PRIMARY KEY (id)
+        ) $engine $charset_collate;
+    ";
+
+    $sql_notes = "
+        CREATE TABLE IF NOT EXISTS $notes_table (
+            note_id bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+            note_date timestamp DEFAULT CURRENT_TIMESTAMP,
+            last_snapshot_id bigint(20) UNSIGNED,
+            entry_user mediumtext NULL,
+            rule_pertaining_to text NULL,
+            post_pertaining_to bigint(20) NULL,
+            other_pertaining_to text NULL,
+            snapshot_note mediumtext NULL,
+            PRIMARY KEY (note_id)
         ) $engine $charset_collate;
     ";
     
@@ -66,6 +81,17 @@ function leanwi_accessibility_create_tables() {
     } catch (Exception $e) {
         error_log('Create snapshot table error: ' . $e->getMessage());
         return new WP_REST_Response(['message' => 'Failed to set up snapshot table.'], 500);
+    }
+
+    try {
+        dbDelta($sql_notes);
+        // Debug logging to track SQL execution
+        if (!empty($wpdb->last_error)) {
+            return new WP_REST_Response(['message' => 'Failed to set up accessibility notes table.'], 500);
+        }
+    } catch (Exception $e) {
+        error_log('Create accessibility notes table error: ' . $e->getMessage());
+        return new WP_REST_Response(['message' => 'Failed to set up accessibility notes table.'], 500);
     }
 
     try {
