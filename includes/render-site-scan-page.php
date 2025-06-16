@@ -5,6 +5,8 @@ function leanwi_render_site_scan_page() {
 
     $rule_filter = isset($_GET['rule']) ? sanitize_text_field($_GET['rule']) : '';
 
+    $rest_nonce = wp_create_nonce('wp_rest');
+    echo '<meta name="rest-api-nonce" content="' . esc_attr($rest_nonce) . '">';
     echo '<div class="wrap"><h1>Site Scan Summary</h1>';
     echo '<p style="margin-bottom: 2em; margin-top: 2em; font-size: 1.2em;">
             <strong>PLEASE NOTE: Accessibility changes made to your pages will not appear on this page until you make a new snapshot.</strong><br>

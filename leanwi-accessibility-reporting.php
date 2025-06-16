@@ -7,7 +7,7 @@ Plugin Name: LEANWI Accessibility Reporting
 GitHub URI:   https://github.com/brendan-leanwi/leanwi-accessibility-reporting
 Update URI:   https://github.com/brendan-leanwi/leanwi-accessibility-reporting
 Description: Functionality to aid reporting on accessibility for your entire site.
-Version: 1.0.4
+Version: 1.0.5
 Author: Brendan Tuckey
 Author URI:   https://github.com/brendan-leanwi
 License:      GPL2
@@ -34,7 +34,7 @@ register_activation_hook( __FILE__, __NAMESPACE__ . '\\leanwi_accessibility_crea
 // Version-based update check
 function leanwi_update_check() {
     $current_version = get_option('leanwi_accessibility_reporting_plugin_version', '1.0.1'); // Default to an old version if not set
-    $new_version = '1.0.4'; // Update this with the new plugin version
+    $new_version = '1.0.5'; // Update this with the new plugin version
 
     if (version_compare($current_version, $new_version, '<')) {
         // Run the table creation logic
@@ -81,10 +81,26 @@ function leanwi_accessibility_enqueue_admin_scripts($hook) {
             true
         );
 
+        /*
         wp_localize_script('leanwi-accessibility-make-snapshot', 'leanwiAccessibility', [
             'ajax_url' => admin_url('admin-ajax.php'),
             'nonce'    => wp_create_nonce('leanwi_accessibility_nonce'),
         ]);
+        */
+
+        $rest_nonce = wp_create_nonce('wp_rest');
+
+        wp_localize_script('leanwi-accessibility-make-snapshot', 'wpApiSettings', [
+            'root'  => esc_url_raw(rest_url()),
+            'nonce' => $rest_nonce,
+        ]);
+
+        // Also keep your plugin-specific object if needed
+        wp_localize_script('leanwi-accessibility-make-snapshot', 'leanwiAccessibility', [
+            'ajax_url' => admin_url('admin-ajax.php'),
+            'nonce'    => $rest_nonce,
+        ]);
+
     }
 }
 add_action('admin_enqueue_scripts', __NAMESPACE__ . '\\leanwi_accessibility_enqueue_admin_scripts');
