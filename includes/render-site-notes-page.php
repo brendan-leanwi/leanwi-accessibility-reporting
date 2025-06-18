@@ -2,9 +2,11 @@
 
 function leanwi_render_site_notes_page() {
     global $wpdb;
+    $accessibility_table = $wpdb->prefix . 'accessibility_checker';
     $notes_table = $wpdb->prefix . 'leanwi_accessibility_notes';
     $snapshot_table = $wpdb->prefix . 'leanwi_snapshot';
     $checker_table = $wpdb->prefix . 'leanwi_accessibility_checker_snapshot';
+    $posts_table = $wpdb->prefix . 'posts';
 
     // Handle form submission
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['leanwi_add_note_nonce']) && wp_verify_nonce($_POST['leanwi_add_note_nonce'], 'leanwi_add_note_action')) {
@@ -29,12 +31,24 @@ function leanwi_render_site_notes_page() {
         echo '<div class="notice notice-success"><p>Note added successfully!</p></div>';
     }
 
-    // Get dropdown data
-    $rules = $wpdb->get_col("SELECT DISTINCT rule FROM $checker_table ORDER BY rule");
+    // Get dropdown data for rules and posts/pages
+    $rules = $wpdb->get_col("
+        SELECT DISTINCT rule FROM (
+            SELECT rule FROM $checker_table
+            UNION
+            SELECT rule FROM $accessibility_table
+        ) AS combined_rules
+        ORDER BY rule
+    ");
+    
     $posts = $wpdb->get_results("
         SELECT DISTINCT p.ID, p.post_title
-        FROM $checker_table c
-        JOIN {$wpdb->posts} p ON c.postid = p.ID
+        FROM (
+            SELECT postid FROM $checker_table
+            UNION
+            SELECT postid FROM $accessibility_table
+        ) AS combined_posts
+        JOIN $posts_table p ON combined_posts.postid = p.ID
         ORDER BY p.post_title
     ");
 
