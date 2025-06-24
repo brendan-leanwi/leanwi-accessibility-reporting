@@ -7,7 +7,7 @@ Plugin Name: LEANWI Accessibility Reporting
 GitHub URI:   https://github.com/brendan-leanwi/leanwi-accessibility-reporting
 Update URI:   https://github.com/brendan-leanwi/leanwi-accessibility-reporting
 Description: Functionality to aid reporting on accessibility for your entire site.
-Version: 1.0.6
+Version: 1.0.7
 Author: Brendan Tuckey
 Author URI:   https://github.com/brendan-leanwi
 License:      GPL2
@@ -24,6 +24,7 @@ define('LEANWI_AR_URL', plugin_dir_url(__FILE__));
 require_once LEANWI_AR_PATH . 'includes/db-setup.php';
 require_once LEANWI_AR_PATH . 'includes/render-site-scan-page.php';
 require_once LEANWI_AR_PATH . 'includes/render-site-notes-page.php';
+require_once LEANWI_AR_PATH . 'includes/render-site-ignores-page.php';
 require_once LEANWI_AR_PATH . 'includes/take-snapshot.php';
 require_once LEANWI_AR_PATH . 'includes/routes.php';
 require_once LEANWI_AR_PATH . 'includes/plugin-updater.php';
@@ -33,8 +34,8 @@ register_activation_hook( __FILE__, __NAMESPACE__ . '\\leanwi_accessibility_crea
 
 // Version-based update check
 function leanwi_update_check() {
-    $current_version = get_option('leanwi_accessibility_reporting_plugin_version', '1.0.5'); // Default to an old version if not set
-    $new_version = '1.0.6'; // Update this with the new plugin version
+    $current_version = get_option('leanwi_accessibility_reporting_plugin_version', '1.0.6'); // Default to an old version if not set
+    $new_version = '1.0.7'; // Update this with the new plugin version
 
     if (version_compare($current_version, $new_version, '<')) {
         // Run the table creation logic
@@ -67,6 +68,18 @@ add_action('admin_menu', function () {
         'manage_options',               // Capability
         'leanwi-site-notes',             // Menu slug
         'leanwi_render_site_notes_page'  // Callback function
+    );
+});
+
+//Site ignores page menu item etc
+add_action('admin_menu', function () {
+    add_submenu_page(
+        'accessibility_checker',        // Correct parent slug
+        'Site Ignores',            // Page title
+        'Site Ignores',                    // Menu title
+        'manage_options',               // Capability
+        'leanwi-site-ignores',             // Menu slug
+        'leanwi_render_site_ignores_page'  // Callback function
     );
 });
 
