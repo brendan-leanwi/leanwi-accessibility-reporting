@@ -27,9 +27,9 @@ function leanwi_render_site_ignores_page() {
                 ", $rule, $type)
             );
 
+            $submitted_normalized = leanwi_normalize_html_object($submitted_objects[$index]);
             foreach ($rows as $row) {
                 $db_normalized = leanwi_normalize_html_object($row->object);
-                $submitted_normalized = leanwi_normalize_html_object($submitted_objects[$index]);
 
                 if ($db_normalized === $submitted_normalized) {
                     error_log("Match found DB: $db_normalized  ===  Submitted: $submitted_normalized");
@@ -56,14 +56,36 @@ function leanwi_render_site_ignores_page() {
         echo '<div class="updated notice"><p>Selected rules were ignored with comments added.</p></div>';
     }
 
+    $filter_rule = isset($_POST['filter_rule']) ? sanitize_text_field($_POST['filter_rule']) : '';
+    $filter_type = isset($_POST['filter_type']) ? sanitize_text_field($_POST['filter_type']) : '';
+
     // Get all non ignored rules and group them
-    $rules = $wpdb->get_results("
+    $query = "
         SELECT rule, ruletype, object
         FROM $accessibility_table
         WHERE ignre = 0
-        GROUP BY rule, ruletype, object
-        ORDER BY rule
-    ");
+    ";
+
+    $params = [];
+
+    if ($filter_rule !== '') {
+        $query .= " AND rule = %s";
+        $params[] = $filter_rule;
+    }
+
+    if ($filter_type !== '') {
+        $query .= " AND ruletype = %s";
+        $params[] = $filter_type;
+    }
+
+    $query .= " GROUP BY rule, ruletype, object ORDER BY rule";
+
+    $rules = $params ? $wpdb->get_results($wpdb->prepare($query, ...$params)) : $wpdb->get_results($query);
+
+
+    $distinct_rules = $wpdb->get_col("SELECT DISTINCT rule FROM $accessibility_table WHERE ignre = 0 ORDER BY rule");
+    $distinct_types = $wpdb->get_col("SELECT DISTINCT ruletype FROM $accessibility_table WHERE ignre = 0 ORDER BY ruletype");
+
 ?>
 
     <div class="wrap">
@@ -72,14 +94,38 @@ function leanwi_render_site_ignores_page() {
             <?php wp_nonce_field('leanwi_add_ignore_action', 'leanwi_add_ignore_nonce'); ?>
             <h2>Site-wide Non-Ignored Errors/Warnings</h2>
 
+            <div style="margin-bottom: 1em;">
+                <label for="filter_rule"><strong>Filter by Rule:</strong></label>
+                <select name="filter_rule" id="filter_rule">
+                    <option value="">-- All Rules --</option>
+                    <?php foreach ($distinct_rules as $rule_option): ?>
+                        <option value="<?php echo esc_attr($rule_option); ?>" <?php selected($filter_rule, $rule_option); ?>>
+                            <?php echo esc_html($rule_option); ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+
+                <label for="filter_type" style="margin-left: 2em;"><strong>Filter by Rule Type:</strong></label>
+                <select name="filter_type" id="filter_type">
+                    <option value="">-- All Types --</option>
+                    <?php foreach ($distinct_types as $type_option): ?>
+                        <option value="<?php echo esc_attr($type_option); ?>" <?php selected($filter_type, $type_option); ?>>
+                            <?php echo esc_html($type_option); ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+
+                <button type="submit" name="refresh_list" class="button">Refresh List</button>
+            </div>
+
             <table class="widefat fixed striped">
                 <thead>
                     <tr>
-                        <th>Rule</th>
-                        <th>Rule Type</th>
-                        <th>Object</th>
-                        <th>Ignore?</th>
-                        <th>Comment</th>
+                        <th style="width: 10%;">Rule</th>
+                        <th style="width: 10%;">Rule Type</th>
+                        <th style="width: 40%;">Object</th>
+                        <th style="width: 10%;">Ignore?</th>
+                        <th style="width: 30%;">Comment</th>
                     </tr>
                 </thead>
                 <tbody>
