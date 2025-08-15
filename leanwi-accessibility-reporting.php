@@ -7,7 +7,7 @@ Plugin Name: LEANWI Accessibility Reporting
 GitHub URI:   https://github.com/brendan-leanwi/leanwi-accessibility-reporting
 Update URI:   https://github.com/brendan-leanwi/leanwi-accessibility-reporting
 Description: Functionality to aid reporting on accessibility for your entire site.
-Version: 1.0.9
+Version: 1.1.0
 Author: Brendan Tuckey
 Author URI:   https://github.com/brendan-leanwi
 License:      GPL2
@@ -27,6 +27,7 @@ require_once LEANWI_AR_PATH . 'includes/render-site-notes-page.php';
 require_once LEANWI_AR_PATH . 'includes/render-site-ignores-page.php';
 require_once LEANWI_AR_PATH . 'includes/take-snapshot.php';
 require_once LEANWI_AR_PATH . 'includes/routes.php';
+require_once LEANWI_AR_PATH . 'includes/latest-snapshot-endpoint.php';
 require_once LEANWI_AR_PATH . 'includes/plugin-updater.php';
 
 // Register activation hook to create database tables
@@ -35,7 +36,7 @@ register_activation_hook( __FILE__, __NAMESPACE__ . '\\leanwi_accessibility_crea
 // Version-based update check
 function leanwi_update_check() {
     $current_version = get_option('leanwi_accessibility_reporting_plugin_version', '1.0.6'); // Default to an old version if not set
-    $new_version = '1.0.9'; // Update this with the new plugin version
+    $new_version = '1.1.0'; // Update this with the new plugin version
 
     if (version_compare($current_version, $new_version, '<')) {
         // Run the table creation logic
