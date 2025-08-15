@@ -35,6 +35,17 @@ function leanwi_render_site_scan_page() {
     echo '<form method="GET" action="' . esc_url(admin_url('admin.php')) . '" style="margin-bottom: 2em;">';
     echo '<input type="hidden" name="page" value="leanwi-site-scan">';
     echo '<h2>Select Two Snapshots to Compare</h2>';
+
+    // Post type filter (pages, posts, all)
+    $post_type_filter = isset($_GET['post_type_filter']) ? sanitize_text_field($_GET['post_type_filter']) : 'all';
+
+    echo '<p><label for="post_type_filter"><strong>Filter by Content Type:</strong></label> ';
+    echo '<select name="post_type_filter" id="post_type_filter">';
+    echo '<option value="all"' . selected($post_type_filter, 'all', false) . '>All Pages & Posts</option>';
+    echo '<option value="page"' . selected($post_type_filter, 'page', false) . '>Pages Only</option>';
+    echo '<option value="post"' . selected($post_type_filter, 'post', false) . '>Posts Only</option>';
+    echo '</select></p>';
+
     echo '<div style="border: 1px solid #ccc; padding: 1em; border-radius: 8px; background: #f9f9f9;">';
 
     foreach ($snapshots as $snapshot) {
@@ -59,6 +70,12 @@ function leanwi_render_site_scan_page() {
         $snapshot_latest = max($selected_snapshots);
         $snapshot_previous = min($selected_snapshots);
 
+        // Prepare post type filter SQL
+        $post_type_condition = '';
+        if ($post_type_filter !== 'all') {
+            $post_type_condition = $wpdb->prepare(" AND p.post_type = %s", $post_type_filter);
+        }
+
         $compare_sql = $wpdb->prepare("
             SELECT 
                 COALESCE(a.rule, b.rule) AS rule,
@@ -67,17 +84,19 @@ function leanwi_render_site_scan_page() {
                 COALESCE(b.count, 0) AS count_previous
             FROM
                 (
-                    SELECT rule, ruleType, COUNT(*) AS count
-                    FROM {$wpdb->prefix}leanwi_accessibility_checker_snapshot
-                    WHERE snapshot_id = %d AND ignre = 0
-                    GROUP BY rule, ruleType
+                    SELECT s.rule, s.ruleType, COUNT(*) AS count
+                    FROM {$wpdb->prefix}leanwi_accessibility_checker_snapshot s
+                    JOIN {$wpdb->posts} p ON p.ID = s.postid
+                    WHERE s.snapshot_id = %d AND s.ignre = 0 {$post_type_condition}
+                    GROUP BY s.rule, s.ruleType
                 ) a
             LEFT JOIN
                 (
-                    SELECT rule, ruleType, COUNT(*) AS count
-                    FROM {$wpdb->prefix}leanwi_accessibility_checker_snapshot
-                    WHERE snapshot_id = %d AND ignre = 0
-                    GROUP BY rule, ruleType
+                    SELECT s.rule, s.ruleType, COUNT(*) AS count
+                    FROM {$wpdb->prefix}leanwi_accessibility_checker_snapshot s
+                    JOIN {$wpdb->posts} p ON p.ID = s.postid
+                    WHERE s.snapshot_id = %d AND s.ignre = 0 {$post_type_condition}
+                    GROUP BY s.rule, s.ruleType
                 ) b ON a.rule = b.rule AND a.ruleType = b.ruleType
 
             UNION
@@ -89,17 +108,19 @@ function leanwi_render_site_scan_page() {
                 COALESCE(b.count, 0) AS count_previous
             FROM
                 (
-                    SELECT rule, ruleType, COUNT(*) AS count
-                    FROM {$wpdb->prefix}leanwi_accessibility_checker_snapshot
-                    WHERE snapshot_id = %d AND ignre = 0
-                    GROUP BY rule, ruleType
+                    SELECT s.rule, s.ruleType, COUNT(*) AS count
+                    FROM {$wpdb->prefix}leanwi_accessibility_checker_snapshot s
+                    JOIN {$wpdb->posts} p ON p.ID = s.postid
+                    WHERE s.snapshot_id = %d AND s.ignre = 0 {$post_type_condition}
+                    GROUP BY s.rule, s.ruleType
                 ) a
             RIGHT JOIN
                 (
-                    SELECT rule, ruleType, COUNT(*) AS count
-                    FROM {$wpdb->prefix}leanwi_accessibility_checker_snapshot
-                    WHERE snapshot_id = %d AND ignre = 0
-                    GROUP BY rule, ruleType
+                    SELECT s.rule, s.ruleType, COUNT(*) AS count
+                    FROM {$wpdb->prefix}leanwi_accessibility_checker_snapshot s
+                    JOIN {$wpdb->posts} p ON p.ID = s.postid
+                    WHERE s.snapshot_id = %d AND s.ignre = 0 {$post_type_condition}
+                    GROUP BY s.rule, s.ruleType
                 ) b ON a.rule = b.rule AND a.ruleType = b.ruleType
 
             ORDER BY (count_latest - count_previous) DESC
@@ -129,7 +150,6 @@ function leanwi_render_site_scan_page() {
             echo '<p>No comparison data found for selected snapshots.</p>';
         }
     } elseif (isset($_GET['compare_snapshots'])) {
-        // If submitted but not 2 snapshots selected, show error
         echo '<p style="color:red;"><strong>Please select exactly two snapshots to compare.</strong></p>';
     }
 
@@ -138,6 +158,12 @@ function leanwi_render_site_scan_page() {
     if ($rule_filter) {
         // Detail view
         echo '<h2>Pages with rule: ' . esc_html($rule_filter) . '</h2>';
+        
+        //Prepare statement for post/page filter if selected
+        $post_type_sql = "";
+        if ($post_type_filter !== 'all') {
+            $post_type_sql .= $wpdb->prepare(" AND p.post_type = %s", $post_type_filter);
+        }
 
         $results = $wpdb->get_results(
             $wpdb->prepare("
@@ -151,8 +177,8 @@ function leanwi_render_site_scan_page() {
                 WHERE s.snapshot_id = (
                     SELECT MAX(snapshot_id) FROM {$wpdb->prefix}leanwi_accessibility_checker_snapshot
                 )
-                AND s.rule = %s
-                GROUP BY p.ID, p.post_name, s.rule, s.ignre
+                AND s.rule = %s " . $post_type_sql . 
+               "GROUP BY p.ID, p.post_name, s.rule, s.ignre
                 ORDER BY p.post_name
             ", $rule_filter)
         );
@@ -178,20 +204,22 @@ function leanwi_render_site_scan_page() {
     } else {
         // Summary view
         $results = $wpdb->get_results("
-            SELECT COUNT(rule) AS count, rule, ruleType
-            FROM {$wpdb->prefix}leanwi_accessibility_checker_snapshot
-            WHERE snapshot_id = (
+            SELECT COUNT(s.rule) AS count, s.rule, s.ruleType
+            FROM {$wpdb->prefix}leanwi_accessibility_checker_snapshot s
+            JOIN {$wpdb->prefix}posts p ON p.ID = s.postid
+            WHERE s.snapshot_id = (
               SELECT MAX(snapshot_id) FROM {$wpdb->prefix}leanwi_accessibility_checker_snapshot
             )
-            AND ignre = 0
-            GROUP BY rule, ruleType
+            AND s.ignre = 0
+            " . ($post_type_filter !== 'all' ? $wpdb->prepare("AND p.post_type = %s", $post_type_filter) : "") . "
+            GROUP BY s.rule, s.ruleType
             ORDER BY count DESC
         ");
 
         echo '<h2>Errored or Warning Violations Still Outstanding</h2>';
         echo '<table class="widefat"><thead><tr><th>Rule</th><th>Type</th><th>Count</th></tr></thead><tbody>';
         foreach ($results as $row) {
-            $link = admin_url('admin.php?page=leanwi-site-scan&rule=' . urlencode($row->rule));
+            $link = admin_url('admin.php?page=leanwi-site-scan&rule=' . urlencode($row->rule) . '&post_type_filter=' . urlencode($post_type_filter));
             echo '<tr>';
             echo '<td><a href="' . esc_url($link) . '">' . esc_html($row->rule) . '</a></td>';
             echo '<td>' . esc_html($row->ruleType) . '</td>';
@@ -202,20 +230,22 @@ function leanwi_render_site_scan_page() {
 
         // Ignored violations summary view
         $ignored_results = $wpdb->get_results("
-            SELECT COUNT(rule) AS count, rule, ruleType
-            FROM {$wpdb->prefix}leanwi_accessibility_checker_snapshot
-            WHERE snapshot_id = (
+            SELECT COUNT(s.rule) AS count, s.rule, s.ruleType
+            FROM {$wpdb->prefix}leanwi_accessibility_checker_snapshot s
+            JOIN {$wpdb->prefix}posts p ON p.ID = s.postid
+            WHERE s.snapshot_id = (
             SELECT MAX(snapshot_id) FROM {$wpdb->prefix}leanwi_accessibility_checker_snapshot
             )
-            AND ignre = 1
-            GROUP BY rule, ruleType
+            AND s.ignre = 1
+            " . ($post_type_filter !== 'all' ? $wpdb->prepare("AND p.post_type = %s", $post_type_filter) : "") . "
+            GROUP BY s.rule, s.ruleType
             ORDER BY count DESC
         ");
 
         echo '<h2>Ignored Violations Summary</h2>';
         echo '<table class="widefat"><thead><tr><th>Rule</th><th>Type</th><th>Count</th></tr></thead><tbody>';
         foreach ($ignored_results as $row) {
-            $link = admin_url('admin.php?page=leanwi-site-scan&rule=' . urlencode($row->rule) . '&ignored=1');
+            $link = admin_url('admin.php?page=leanwi-site-scan&rule=' . urlencode($row->rule) . '&ignored=1&post_type_filter=' . urlencode($post_type_filter));
             echo '<tr>';
             echo '<td><a href="' . esc_url($link) . '">' . esc_html($row->rule) . '</a></td>';
             echo '<td>' . esc_html($row->ruleType) . '</td>';
