@@ -7,7 +7,7 @@ Plugin Name: LEANWI Accessibility Reporting
 GitHub URI:   https://github.com/brendan-leanwi/leanwi-accessibility-reporting
 Update URI:   https://github.com/brendan-leanwi/leanwi-accessibility-reporting
 Description: Functionality to aid reporting on accessibility for your entire site.
-Version: 1.1.0
+Version: 1.1.1
 Author: Brendan Tuckey
 Author URI:   https://github.com/brendan-leanwi
 License:      GPL2
@@ -25,6 +25,7 @@ require_once LEANWI_AR_PATH . 'includes/db-setup.php';
 require_once LEANWI_AR_PATH . 'includes/render-site-scan-page.php';
 require_once LEANWI_AR_PATH . 'includes/render-site-notes-page.php';
 require_once LEANWI_AR_PATH . 'includes/render-site-ignores-page.php';
+require_once LEANWI_AR_PATH . 'includes/render-site-review-request-page.php';
 require_once LEANWI_AR_PATH . 'includes/take-snapshot.php';
 require_once LEANWI_AR_PATH . 'includes/routes.php';
 require_once LEANWI_AR_PATH . 'includes/latest-snapshot-endpoint.php';
@@ -36,7 +37,7 @@ register_activation_hook( __FILE__, __NAMESPACE__ . '\\leanwi_accessibility_crea
 // Version-based update check
 function leanwi_update_check() {
     $current_version = get_option('leanwi_accessibility_reporting_plugin_version', '1.0.6'); // Default to an old version if not set
-    $new_version = '1.1.0'; // Update this with the new plugin version
+    $new_version = '1.1.1'; // Update this with the new plugin version
 
     if (version_compare($current_version, $new_version, '<')) {
         // Run the table creation logic
@@ -84,6 +85,18 @@ add_action('admin_menu', function () {
     );
 });
 
+//Ask for Review page menu item etc
+add_action('admin_menu', function () {
+    add_submenu_page(
+        'accessibility_checker',        // Correct parent slug
+        'Ask for an Accessibility Review',            // Page title
+        'Ask for Review',                    // Menu title
+        'manage_options',               // Capability
+        'leanwi-site-review-request',             // Menu slug
+        'leanwi_render_site_review_request_page'  // Callback function
+    );
+});
+
 function leanwi_accessibility_enqueue_admin_scripts($hook) {
     // Load only if current page is the Site Scan page
     if (isset($_GET['page']) && $_GET['page'] === 'leanwi-site-scan') {
@@ -119,3 +132,34 @@ function leanwi_accessibility_enqueue_admin_scripts($hook) {
 }
 add_action('admin_enqueue_scripts', __NAMESPACE__ . '\\leanwi_accessibility_enqueue_admin_scripts');
 
+// AJAX callback for fetching latest items dynamically
+function leanwi_get_latest_items_ajax() {
+    check_ajax_referer('leanwi_nonce', 'nonce');
+
+    $num_items = isset($_POST['num_items']) ? intval($_POST['num_items']) : 10;
+    global $wpdb;
+
+    $results = $wpdb->get_results(
+        $wpdb->prepare("
+            SELECT post_title, post_type, post_modified
+            FROM {$wpdb->posts}
+            WHERE post_status = 'publish'
+              AND post_type IN ('post','page')
+            ORDER BY post_modified DESC
+            LIMIT %d
+        ", $num_items)
+    );
+
+    $items = "The latest files changed include:\n";
+    foreach ($results as $row) {
+        $items .= sprintf(
+            "- %s (%s), last modified %s\n",
+            $row->post_title ?: '(no title)',
+            ucfirst($row->post_type),
+            date('Y-m-d H:i', strtotime($row->post_modified))
+        );
+    }
+
+    wp_send_json_success($items);
+}
+add_action('wp_ajax_leanwi_get_latest_items', __NAMESPACE__ . '\\leanwi_get_latest_items_ajax');
