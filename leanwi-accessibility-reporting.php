@@ -7,7 +7,7 @@ Plugin Name: LEANWI Accessibility Reporting
 GitHub URI:   https://github.com/brendan-leanwi/leanwi-accessibility-reporting
 Update URI:   https://github.com/brendan-leanwi/leanwi-accessibility-reporting
 Description: Functionality to aid reporting on accessibility for your entire site.
-Version: 1.1.1
+Version: 1.1.2
 Author: Brendan Tuckey
 Author URI:   https://github.com/brendan-leanwi
 License:      GPL2
@@ -37,7 +37,7 @@ register_activation_hook( __FILE__, __NAMESPACE__ . '\\leanwi_accessibility_crea
 // Version-based update check
 function leanwi_update_check() {
     $current_version = get_option('leanwi_accessibility_reporting_plugin_version', '1.0.6'); // Default to an old version if not set
-    $new_version = '1.1.1'; // Update this with the new plugin version
+    $new_version = '1.1.2'; // Update this with the new plugin version
 
     if (version_compare($current_version, $new_version, '<')) {
         // Run the table creation logic
@@ -87,6 +87,15 @@ add_action('admin_menu', function () {
 
 //Ask for Review page menu item etc
 add_action('admin_menu', function () {
+    add_menu_page(
+        'Ask for Review',   // Page title (for the parent menu)
+        'Ask for Review',     // Menu title (for the plugin name in the dashboard)
+        'manage_options',         // Capability
+        'leanwi-site-review-request-main', // Menu slug
+        'leanwi_render_site_review_request_main_page',       // Callback function
+        'dashicons-email-alt2',     // Menu icon (optional)
+        6                         // Position
+    );
     add_submenu_page(
         'accessibility_checker',        // Correct parent slug
         'Ask for an Accessibility Review',            // Page title

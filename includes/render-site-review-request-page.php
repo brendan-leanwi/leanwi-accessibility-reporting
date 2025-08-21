@@ -1,4 +1,10 @@
 <?php
+
+// The link in the main dashboard just forwards to the accessibility version
+function leanwi_render_site_review_request_main_page() {
+    leanwi_render_site_review_request_page();
+}
+
 function leanwi_render_site_review_request_page() {
     global $wpdb;
 
