@@ -10,6 +10,9 @@ function leanwi_render_site_review_request_page() {
 
     // Default number of items (dropdown)
     $num_items = isset($_POST['leanwi_num_items']) ? intval($_POST['leanwi_num_items']) : 10;
+    $provided_context = isset($_GET['leanwi_review_context'])
+        ? sanitize_textarea_field(wp_unslash($_GET['leanwi_review_context']))
+        : '';
 
     // Initial fetch (for non-JS fallback)
     $recent_changes = $wpdb->get_results(
@@ -24,14 +27,18 @@ function leanwi_render_site_review_request_page() {
     );
 
     // Build default text for textarea
-    $default_text = "The latest files changed include:\n";
-    foreach ($recent_changes as $post) {
-        $default_text .= sprintf(
-            "- %s (%s), last modified %s\n",
-            $post->post_title ?: '(no title)',
-            ucfirst($post->post_type),
-            date('Y-m-d H:i', strtotime($post->post_modified))
-        );
+    if ($provided_context !== '') {
+        $default_text = $provided_context;
+    } else {
+        $default_text = "The latest files changed include:\n";
+        foreach ($recent_changes as $post) {
+            $default_text .= sprintf(
+                "- %s (%s), last modified %s\n",
+                $post->post_title ?: '(no title)',
+                ucfirst($post->post_type),
+                date('Y-m-d H:i', strtotime($post->post_modified))
+            );
+        }
     }
 
     // Handle form submit

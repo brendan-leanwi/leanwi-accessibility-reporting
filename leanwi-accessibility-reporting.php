@@ -7,14 +7,14 @@ Plugin Name: LEANWI Accessibility Reporting
 GitHub URI:   https://github.com/brendan-leanwi/leanwi-accessibility-reporting
 Update URI:   https://github.com/brendan-leanwi/leanwi-accessibility-reporting
 Description: Functionality to aid reporting on accessibility for your entire site.
-Version: 1.1.2
+Version: 1.2
 Author: Brendan Tuckey
 Author URI:   https://github.com/brendan-leanwi
 License:      GPL2
 License URI:  https://www.gnu.org/licenses/gpl-2.0.html
 Text Domain:  leanwi-tutorial
 Domain Path:  /languages
-Tested up to: 6.8.1
+Tested up to: 7.0
 */
 
 // Define plugin constants
@@ -23,6 +23,7 @@ define('LEANWI_AR_URL', plugin_dir_url(__FILE__));
 
 require_once LEANWI_AR_PATH . 'includes/db-setup.php';
 require_once LEANWI_AR_PATH . 'includes/render-site-scan-page.php';
+require_once LEANWI_AR_PATH . 'includes/render-focused-content-report-page.php';
 require_once LEANWI_AR_PATH . 'includes/render-site-notes-page.php';
 require_once LEANWI_AR_PATH . 'includes/render-site-ignores-page.php';
 require_once LEANWI_AR_PATH . 'includes/render-site-review-request-page.php';
@@ -36,8 +37,8 @@ register_activation_hook( __FILE__, __NAMESPACE__ . '\\leanwi_accessibility_crea
 
 // Version-based update check
 function leanwi_update_check() {
-    $current_version = get_option('leanwi_accessibility_reporting_plugin_version', '1.0.6'); // Default to an old version if not set
-    $new_version = '1.1.2'; // Update this with the new plugin version
+    $current_version = get_option('leanwi_accessibility_reporting_plugin_version', '1.1.3'); // Default to an old version if not set
+    $new_version = '1.2'; // Update this with the new plugin version
 
     if (version_compare($current_version, $new_version, '<')) {
         // Run the table creation logic
@@ -58,6 +59,18 @@ add_action('admin_menu', function () {
         'manage_options',               // Capability
         'leanwi-site-scan',             // Menu slug
         'leanwi_render_site_scan_page'  // Callback function
+    );
+});
+
+//Focused content report page menu item etc
+add_action('admin_menu', function () {
+    add_submenu_page(
+        'accessibility_checker',
+        'Focused Content Report',
+        'Focused Content Report',
+        'edit_posts',
+        'leanwi-focused-content-report',
+        'leanwi_render_focused_content_report_page'
     );
 });
 
@@ -137,6 +150,44 @@ function leanwi_accessibility_enqueue_admin_scripts($hook) {
             'nonce'    => $rest_nonce,
         ]);
 
+    }
+
+    if (isset($_GET['page']) && $_GET['page'] === 'leanwi-focused-content-report') {
+        wp_enqueue_style(
+            'leanwi-focused-content-report',
+            plugin_dir_url(__FILE__) . 'assets/focused-content-report.css',
+            [],
+            '1.1.3'
+        );
+
+        $script_dependencies = [];
+        $tesseract_url = apply_filters(
+            'leanwi_accessibility_tesseract_js_url',
+            'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'
+        );
+
+        if (!empty($tesseract_url)) {
+            wp_enqueue_script(
+                'leanwi-tesseract-js',
+                esc_url_raw($tesseract_url),
+                [],
+                '5.0.0',
+                true
+            );
+            $script_dependencies[] = 'leanwi-tesseract-js';
+        }
+
+        wp_enqueue_script(
+            'leanwi-focused-content-report',
+            plugin_dir_url(__FILE__) . 'assets/focused-content-report.js',
+            $script_dependencies,
+            '1.1.3',
+            true
+        );
+
+        wp_localize_script('leanwi-focused-content-report', 'leanwiFocusedReport', [
+            'ocrMinWords' => 10,
+        ]);
     }
 }
 add_action('admin_enqueue_scripts', __NAMESPACE__ . '\\leanwi_accessibility_enqueue_admin_scripts');

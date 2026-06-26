@@ -1,0 +1,138 @@
+.leanwi-focused-report .description {
+  max-width: 900px;
+}
+
+.leanwi-focused-filters {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  margin: 18px 0;
+  padding: 14px;
+  border: 1px solid #dcdcde;
+  background: #fff;
+}
+
+.leanwi-focused-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.leanwi-focused-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+  margin: 18px 0;
+}
+
+.leanwi-focused-summary div,
+.leanwi-focused-ocr-panel,
+.leanwi-focused-post {
+  border: 1px solid #dcdcde;
+  background: #fff;
+}
+
+.leanwi-focused-summary div {
+  padding: 14px;
+}
+
+.leanwi-focused-summary strong {
+  display: block;
+  font-size: 28px;
+  line-height: 1.1;
+}
+
+.leanwi-focused-summary span,
+.leanwi-focused-detail,
+.leanwi-focused-empty,
+#leanwi-ocr-status {
+  color: #646970;
+}
+
+.leanwi-focused-ocr-panel {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: center;
+  margin: 18px 0;
+  padding: 16px;
+}
+
+.leanwi-focused-ocr-panel h2 {
+  margin-top: 0;
+}
+
+.leanwi-focused-post {
+  margin: 18px 0;
+}
+
+.leanwi-focused-post-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 16px;
+  border-bottom: 1px solid #dcdcde;
+}
+
+.leanwi-focused-post-header h2 {
+  margin: 0 0 6px;
+}
+
+.leanwi-focused-post-header p {
+  margin: 0;
+}
+
+.leanwi-focused-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.leanwi-focused-issue-list,
+.leanwi-focused-ocr-results {
+  padding: 0 16px;
+}
+
+.leanwi-focused-issue {
+  padding: 14px 0;
+  border-bottom: 1px solid #dcdcde;
+}
+
+.leanwi-focused-issue:last-child {
+  border-bottom: 0;
+}
+
+.leanwi-focused-issue h3 {
+  margin: 8px 0;
+}
+
+.leanwi-focused-issue p {
+  margin: 6px 0;
+}
+
+.leanwi-focused-badge {
+  display: inline-block;
+  min-width: 54px;
+  margin-right: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.leanwi-focused-fix .leanwi-focused-badge {
+  background: #b42318;
+}
+
+.leanwi-focused-review .leanwi-focused-badge {
+  background: #8a4b00;
+}
+
+.leanwi-focused-warning .leanwi-focused-badge {
+  background: #666800;
+}
