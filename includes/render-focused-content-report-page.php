@@ -239,6 +239,7 @@ function leanwi_acr_check_headings($xpath, &$issues) {
         $level = intval(substr(strtolower($heading->nodeName), 1));
         $text = leanwi_acr_clean_text($heading->textContent);
         $element = 'h' . $level . ': ' . leanwi_acr_shorten($text, 80);
+        $locator = leanwi_acr_node_locator($heading);
 
         if ($level === 1) {
             $issues[] = leanwi_acr_issue(
@@ -248,7 +249,8 @@ function leanwi_acr_check_headings($xpath, &$issues) {
                 'Most WordPress themes already use the page title as the H1.',
                 'Use H2 for main sections inside the editor unless this page intentionally needs an H1 in the content area.',
                 $element,
-                'headings'
+                'headings',
+                $locator
             );
         }
 
@@ -260,7 +262,8 @@ function leanwi_acr_check_headings($xpath, &$issues) {
                 'Found H' . $level . ' after H' . $previous_level . '.',
                 'Do not skip heading levels. For example, use H3 after H2, not H4.',
                 $element,
-                'headings'
+                'headings',
+                $locator
             );
         }
 
@@ -279,12 +282,14 @@ function leanwi_acr_check_images($xpath, &$issues, &$ocr_images) {
         $alt = leanwi_acr_clean_text($image->getAttribute('alt'));
         $element = 'img: ' . leanwi_acr_shorten($src, 100);
         $suspicious = leanwi_acr_is_suspicious_image($image, $src, $alt);
+        $locator = leanwi_acr_node_locator($image);
 
         if ($src && leanwi_acr_is_ocr_candidate($src)) {
             $ocr_images[] = [
                 'src' => esc_url_raw($src),
                 'alt' => $alt,
                 'element' => $element,
+                'locator' => $locator,
             ];
         }
 
@@ -296,7 +301,8 @@ function leanwi_acr_check_images($xpath, &$issues, &$ocr_images) {
                 'Image source: ' . leanwi_acr_shorten($src, 140),
                 'Add concise alt text, or mark the image decorative if it truly adds no information.',
                 $element,
-                'alt-text'
+                'alt-text',
+                $locator
             );
         } elseif ($alt === '' && $suspicious) {
             $issues[] = leanwi_acr_issue(
@@ -306,7 +312,8 @@ function leanwi_acr_check_images($xpath, &$issues, &$ocr_images) {
                 'Image source: ' . leanwi_acr_shorten($src, 140),
                 'If this is a flyer, chart, map, schedule, or infographic, add nearby real text with the same information.',
                 $element,
-                'infographics'
+                'infographics',
+                $locator
             );
         } elseif ($alt !== '' && preg_match('/^(image|photo|picture|graphic|screenshot|img|dsc|untitled)([\s_-]?\d+)?$/i', $alt)) {
             $issues[] = leanwi_acr_issue(
@@ -316,7 +323,8 @@ function leanwi_acr_check_images($xpath, &$issues, &$ocr_images) {
                 'Current alt text: "' . $alt . '"',
                 'Describe the purpose or information in the image, not just that it is an image.',
                 $element,
-                'alt-text'
+                'alt-text',
+                $locator
             );
         } elseif ($alt !== '' && preg_match('/\.(jpg|jpeg|png|gif|webp|svg|pdf)$/i', $alt)) {
             $issues[] = leanwi_acr_issue(
@@ -326,7 +334,8 @@ function leanwi_acr_check_images($xpath, &$issues, &$ocr_images) {
                 'Current alt text: "' . $alt . '"',
                 'Replace file names with useful descriptions.',
                 $element,
-                'alt-text'
+                'alt-text',
+                $locator
             );
         } elseif (strlen($alt) > 160) {
             $issues[] = leanwi_acr_issue(
@@ -336,7 +345,8 @@ function leanwi_acr_check_images($xpath, &$issues, &$ocr_images) {
                 'Alt text is ' . strlen($alt) . ' characters.',
                 'Keep ordinary alt text concise. Put long explanations in nearby page text.',
                 $element,
-                'alt-text'
+                'alt-text',
+                $locator
             );
         }
 
@@ -348,7 +358,8 @@ function leanwi_acr_check_images($xpath, &$issues, &$ocr_images) {
                 'Image source: ' . leanwi_acr_shorten($src, 140),
                 'Confirm that all important information in the image is also available as real text on the page.',
                 $element,
-                'infographics'
+                'infographics',
+                $locator
             );
         }
     }
@@ -380,11 +391,12 @@ function leanwi_acr_check_links($xpath, &$issues) {
             continue;
         }
 
-        $text = leanwi_acr_clean_text($link->textContent);
+        $text = leanwi_acr_link_accessible_text($link);
         $lower = strtolower($text);
         $element = 'a: ' . leanwi_acr_shorten($href, 100);
+        $locator = leanwi_acr_node_locator($link);
 
-        if ($text === '' && !$link->hasAttribute('aria-label')) {
+        if ($text === '') {
             $issues[] = leanwi_acr_issue(
                 'fix',
                 'Links',
@@ -392,7 +404,8 @@ function leanwi_acr_check_links($xpath, &$issues) {
                 'Destination: ' . leanwi_acr_shorten($href, 140),
                 'Add descriptive link text or an accessible label.',
                 $element,
-                'links'
+                'links',
+                $locator
             );
         } elseif (in_array($lower, $vague, true)) {
             $issues[] = leanwi_acr_issue(
@@ -402,7 +415,8 @@ function leanwi_acr_check_links($xpath, &$issues) {
                 'Current link text: "' . $text . '"',
                 'Use link text that makes sense out of context, such as the document, page, or action name.',
                 $element,
-                'links'
+                'links',
+                $locator
             );
         } elseif (preg_match('/^https?:\/\/\S+$/i', $text)) {
             $issues[] = leanwi_acr_issue(
@@ -412,7 +426,8 @@ function leanwi_acr_check_links($xpath, &$issues) {
                 'Current link text: "' . leanwi_acr_shorten($text, 120) . '"',
                 'Replace raw URLs with descriptive link text.',
                 $element,
-                'links'
+                'links',
+                $locator
             );
         }
 
@@ -425,28 +440,91 @@ function leanwi_acr_check_links($xpath, &$issues) {
                 'Document link: ' . leanwi_acr_shorten($href, 140),
                 'Confirm this file is accessible, or convert the information into a web page when possible.',
                 $element,
-                'documents'
+                'documents',
+                $locator
             );
         }
 
         if ($text !== '') {
-            $link_map[$lower][esc_url_raw($href)] = true;
+            if (!isset($link_map[$lower])) {
+                $link_map[$lower] = [
+                    'hrefs' => [],
+                    'locator' => $locator,
+                ];
+            }
+            $link_map[$lower]['hrefs'][esc_url_raw($href)] = true;
         }
     }
 
-    foreach ($link_map as $text => $hrefs) {
-        if (count($hrefs) > 1 && !in_array($text, $vague, true)) {
+    foreach ($link_map as $text => $data) {
+        if (count($data['hrefs']) > 1 && !in_array($text, $vague, true)) {
             $issues[] = leanwi_acr_issue(
                 'warning',
                 'Links',
                 'Same link text points to different places.',
-                'Link text "' . $text . '" goes to ' . count($hrefs) . ' different destinations.',
+                'Link text "' . $text . '" goes to ' . count($data['hrefs']) . ' different destinations.',
                 'Make each link label specific enough to distinguish its destination.',
                 'a',
-                'links'
+                'links',
+                $data['locator']
             );
         }
     }
+}
+
+function leanwi_acr_link_accessible_text($link) {
+    $label = leanwi_acr_aria_labelledby_text($link);
+    if ($label !== '') {
+        return $label;
+    }
+
+    $aria_label = leanwi_acr_clean_text($link->getAttribute('aria-label'));
+    if ($aria_label !== '') {
+        return $aria_label;
+    }
+
+    $text = leanwi_acr_clean_text($link->textContent);
+    if ($text !== '') {
+        return $text;
+    }
+
+    $parts = [];
+    $xpath = new DOMXPath($link->ownerDocument);
+    foreach ($xpath->query('.//img[@alt]', $link) as $image) {
+        $alt = leanwi_acr_clean_text($image->getAttribute('alt'));
+        if ($alt !== '') {
+            $parts[] = $alt;
+        }
+    }
+
+    $image_alt = leanwi_acr_clean_text(implode(' ', $parts));
+    if ($image_alt !== '') {
+        return $image_alt;
+    }
+
+    return leanwi_acr_clean_text($link->getAttribute('title'));
+}
+
+function leanwi_acr_aria_labelledby_text($node) {
+    $ids = preg_split('/\s+/', trim($node->getAttribute('aria-labelledby')));
+    if (empty($ids)) {
+        return '';
+    }
+
+    $parts = [];
+    $xpath = new DOMXPath($node->ownerDocument);
+    foreach ($ids as $id) {
+        $safe_id = preg_replace('/[^A-Za-z0-9_\-:.]/', '', $id);
+        if ($safe_id === '') {
+            continue;
+        }
+        $matches = $xpath->query('//*[@id="' . $safe_id . '"]');
+        if ($matches && $matches->length > 0) {
+            $parts[] = leanwi_acr_clean_text($matches->item(0)->textContent);
+        }
+    }
+
+    return leanwi_acr_clean_text(implode(' ', $parts));
 }
 
 function leanwi_acr_check_tables($xpath, &$issues) {
@@ -457,6 +535,7 @@ function leanwi_acr_check_tables($xpath, &$issues) {
             continue;
         }
 
+        $locator = leanwi_acr_node_locator($table);
         $table_xpath = new DOMXPath($table->ownerDocument);
         $has_th = $table_xpath->query('.//th', $table)->length > 0;
         $has_caption = $table_xpath->query('.//caption', $table)->length > 0;
@@ -470,7 +549,8 @@ function leanwi_acr_check_tables($xpath, &$issues) {
                 'No table header cells were found.',
                 'Use a real header row or column so screen readers can associate data cells with headings.',
                 'table',
-                'tables'
+                'tables',
+                $locator
             );
         }
 
@@ -482,7 +562,8 @@ function leanwi_acr_check_tables($xpath, &$issues) {
                 'No table caption was found.',
                 'Add a short caption or nearby sentence that explains what the table contains.',
                 'table',
-                'tables'
+                'tables',
+                $locator
             );
         }
     }
@@ -509,6 +590,7 @@ function leanwi_acr_check_forms($xpath, &$issues) {
             || leanwi_acr_has_ancestor_tag($field, 'label');
 
         if (!$has_label) {
+            $locator = leanwi_acr_node_locator($field);
             $detail = $field->hasAttribute('placeholder')
                 ? 'Placeholder text is "' . $field->getAttribute('placeholder') . '".'
                 : 'No label, aria-label, aria-labelledby, or title was found.';
@@ -520,7 +602,8 @@ function leanwi_acr_check_forms($xpath, &$issues) {
                 $detail,
                 'Add a visible label connected to the field. Placeholder text should not be the only label.',
                 $field->nodeName,
-                'forms'
+                'forms',
+                $locator
             );
         }
     }
@@ -531,6 +614,7 @@ function leanwi_acr_check_buttons($xpath, &$issues) {
     foreach ($xpath->query('//button') as $button) {
         $name = leanwi_acr_clean_text($button->textContent ?: $button->getAttribute('aria-label') ?: $button->getAttribute('title'));
         if ($name !== '' && in_array(strtolower($name), $vague, true)) {
+            $locator = leanwi_acr_node_locator($button);
             $issues[] = leanwi_acr_issue(
                 'warning',
                 'Buttons',
@@ -538,7 +622,8 @@ function leanwi_acr_check_buttons($xpath, &$issues) {
                 'Current button text: "' . $name . '"',
                 'Use action-specific button text when possible.',
                 'button',
-                'buttons'
+                'buttons',
+                $locator
             );
         }
     }
@@ -547,6 +632,7 @@ function leanwi_acr_check_buttons($xpath, &$issues) {
 function leanwi_acr_check_media_embeds($xpath, &$issues) {
     foreach ($xpath->query('//iframe') as $iframe) {
         $src = $iframe->getAttribute('src');
+        $locator = leanwi_acr_node_locator($iframe);
         if (!$iframe->hasAttribute('title')) {
             $issues[] = leanwi_acr_issue(
                 'fix',
@@ -555,7 +641,8 @@ function leanwi_acr_check_media_embeds($xpath, &$issues) {
                 'Frame source: ' . leanwi_acr_shorten($src, 140),
                 'Add a short title that describes the embedded content, such as map, calendar, or video.',
                 'iframe',
-                'embeds'
+                'embeds',
+                $locator
             );
         }
         if (preg_match('/calendar|maps|youtube|vimeo|facebook|twitter/i', $src)) {
@@ -566,26 +653,29 @@ function leanwi_acr_check_media_embeds($xpath, &$issues) {
                 'Frame source: ' . leanwi_acr_shorten($src, 140),
                 'Confirm the embed can be used with a keyboard and has an accessible name.',
                 'iframe',
-                'embeds'
+                'embeds',
+                $locator
             );
         }
     }
 
     foreach ($xpath->query('//video') as $video) {
+        $locator = leanwi_acr_node_locator($video);
         $tracks = (new DOMXPath($video->ownerDocument))->query('.//track[contains(" captions subtitles ", concat(" ", translate(@kind, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), " "))]', $video);
         if ($video->hasAttribute('autoplay')) {
-            $issues[] = leanwi_acr_issue('fix', 'Media', 'Media is set to autoplay.', 'Autoplay can interfere with screen readers and keyboard users.', 'Remove autoplay unless there is a strong accessibility-supported reason.', 'video', 'media');
+            $issues[] = leanwi_acr_issue('fix', 'Media', 'Media is set to autoplay.', 'Autoplay can interfere with screen readers and keyboard users.', 'Remove autoplay unless there is a strong accessibility-supported reason.', 'video', 'media', $locator);
         }
         if (!$tracks || $tracks->length === 0) {
-            $issues[] = leanwi_acr_issue('review', 'Media', 'Video may need captions or a transcript.', 'No captions or subtitles track was found in the video element.', 'Provide accurate captions for spoken content and meaningful audio.', 'video', 'media');
+            $issues[] = leanwi_acr_issue('review', 'Media', 'Video may need captions or a transcript.', 'No captions or subtitles track was found in the video element.', 'Provide accurate captions for spoken content and meaningful audio.', 'video', 'media', $locator);
         }
     }
 
     foreach ($xpath->query('//audio') as $audio) {
+        $locator = leanwi_acr_node_locator($audio);
         if ($audio->hasAttribute('autoplay')) {
-            $issues[] = leanwi_acr_issue('fix', 'Media', 'Media is set to autoplay.', 'Autoplay can interfere with screen readers and keyboard users.', 'Remove autoplay unless there is a strong accessibility-supported reason.', 'audio', 'media');
+            $issues[] = leanwi_acr_issue('fix', 'Media', 'Media is set to autoplay.', 'Autoplay can interfere with screen readers and keyboard users.', 'Remove autoplay unless there is a strong accessibility-supported reason.', 'audio', 'media', $locator);
         }
-        $issues[] = leanwi_acr_issue('review', 'Media', 'Audio content may need a transcript.', 'Audio elements should have a nearby transcript when they include meaningful speech.', 'Confirm a transcript is available near the audio.', 'audio', 'media');
+        $issues[] = leanwi_acr_issue('review', 'Media', 'Audio content may need a transcript.', 'Audio elements should have a nearby transcript when they include meaningful speech.', 'Confirm a transcript is available near the audio.', 'audio', 'media', $locator);
     }
 }
 
@@ -593,6 +683,7 @@ function leanwi_acr_check_manual_lists($xpath, &$issues) {
     foreach ($xpath->query('//p') as $paragraph) {
         $text = leanwi_acr_text_with_breaks($paragraph);
         if (preg_match('/(^|\n)\s*(?:[-*]|\d+[.)])\s+\S+/m', $text)) {
+            $locator = leanwi_acr_node_locator($paragraph);
             $issues[] = leanwi_acr_issue(
                 'warning',
                 'Lists',
@@ -600,7 +691,8 @@ function leanwi_acr_check_manual_lists($xpath, &$issues) {
                 'A paragraph looks like a list typed with manual markers.',
                 'Use the WordPress bullet or numbered list block instead of typing list markers by hand.',
                 'p',
-                'lists'
+                'lists',
+                $locator
             );
         }
     }
@@ -610,6 +702,7 @@ function leanwi_acr_check_color_cues($xpath, &$issues) {
     foreach ($xpath->query('//p|//li') as $node) {
         $text = leanwi_acr_clean_text($node->textContent);
         if (preg_match('/\b(?:items?|fields?|links?|buttons?|text|rows?)\s+(?:in|marked|shown as|shown in)\s+(?:red|green|blue|yellow|orange|purple)\b|\bclick\s+(?:the\s+)?(?:red|green|blue|yellow|orange|purple)\b|\b(?:red|green|blue|yellow|orange|purple)\s+(?:button|link|text|box|row)\b/i', $text, $match)) {
+            $locator = leanwi_acr_node_locator($node);
             $issues[] = leanwi_acr_issue(
                 'fix',
                 'Color',
@@ -617,7 +710,8 @@ function leanwi_acr_check_color_cues($xpath, &$issues) {
                 'Found: "' . leanwi_acr_shorten($match[0], 120) . '"',
                 'Do not use color as the only way to identify required items, status, or actions. Add text or icons too.',
                 $node->nodeName,
-                'color'
+                'color',
+                $locator
             );
         }
     }
@@ -639,6 +733,7 @@ function leanwi_acr_check_inline_contrast($xpath, &$issues) {
 
         $ratio = leanwi_acr_contrast_ratio($foreground, $background);
         if ($ratio < 4.5) {
+            $locator = leanwi_acr_node_locator($node);
             $issues[] = leanwi_acr_issue(
                 'fix',
                 'Color contrast',
@@ -646,7 +741,8 @@ function leanwi_acr_check_inline_contrast($xpath, &$issues) {
                 'Estimated contrast ratio is ' . number_format($ratio, 2) . ':1.',
                 'Use a text/background color combination with at least 4.5:1 contrast for ordinary text.',
                 $node->nodeName,
-                'contrast'
+                'contrast',
+                $locator
             );
         }
     }
@@ -703,7 +799,12 @@ function leanwi_acr_summarize_results($reports) {
 function leanwi_acr_render_post_report($post_report) {
     $post = $post_report['post'];
     $issues = $post_report['issues'];
-    $ocr_images = $post_report['ocr_images'];
+    $ocr_images = array_map(function ($image) use ($post_report) {
+        if (!empty($image['locator'])) {
+            $image['highlight_url'] = leanwi_acr_highlight_url_for_locator($post_report, $image['locator']);
+        }
+        return $image;
+    }, $post_report['ocr_images']);
     ?>
     <section class="leanwi-focused-post" data-post-id="<?php echo esc_attr($post->ID); ?>">
         <header class="leanwi-focused-post-header">
@@ -718,7 +819,7 @@ function leanwi_acr_render_post_report($post_report) {
                 <?php if ($post_report['edit_link']) : ?>
                     <a class="button" href="<?php echo esc_url($post_report['edit_link']); ?>">Edit</a>
                 <?php endif; ?>
-                <a class="button" href="<?php echo esc_url($post_report['permalink']); ?>" target="_blank" rel="noopener">View</a>
+                <a class="button" href="<?php echo esc_url($post_report['permalink']); ?>" target="_blank" rel="noopener">Open Page</a>
                 <a class="button" href="<?php echo esc_url(leanwi_acr_review_request_url($post_report)); ?>">Ask for Review</a>
             </div>
         </header>
@@ -729,7 +830,7 @@ function leanwi_acr_render_post_report($post_report) {
             <?php endif; ?>
 
             <?php foreach ($issues as $issue) : ?>
-                <?php leanwi_acr_render_issue($issue); ?>
+                <?php leanwi_acr_render_issue($issue, $post_report); ?>
             <?php endforeach; ?>
         </div>
 
@@ -768,9 +869,36 @@ function leanwi_acr_review_request_url($post_report) {
     );
 }
 
-function leanwi_acr_render_issue($issue) {
+function leanwi_acr_highlight_url_for_locator($post_report, $locator) {
+    if (empty($locator) || !is_array($locator)) {
+        return '';
+    }
+
+    $post = $post_report['post'];
+    return add_query_arg(
+        [
+            'leanwi_acr_highlight' => '1',
+            'leanwi_acr_post' => $post->ID,
+            'leanwi_acr_locator' => leanwi_acr_encode_locator($locator),
+            'leanwi_acr_nonce' => wp_create_nonce('leanwi_acr_highlight_' . $post->ID),
+        ],
+        $post_report['permalink']
+    );
+}
+
+function leanwi_acr_encode_locator($locator) {
+    $json = wp_json_encode($locator);
+    if (!is_string($json) || $json === '') {
+        return '';
+    }
+
+    return rtrim(strtr(base64_encode($json), '+/', '-_'), '=');
+}
+
+function leanwi_acr_render_issue($issue, $post_report = null) {
     $tutorials = leanwi_acr_tutorial_links();
     $tutorial = $tutorials[$issue['tutorial_key']] ?? '';
+    $highlight_url = $post_report ? leanwi_acr_highlight_url_for_locator($post_report, $issue['locator'] ?? []) : '';
     ?>
     <article class="leanwi-focused-issue leanwi-focused-<?php echo esc_attr($issue['severity']); ?>">
         <div>
@@ -787,14 +915,19 @@ function leanwi_acr_render_issue($issue) {
         <?php if (!empty($issue['element'])) : ?>
             <p class="leanwi-focused-detail">Element: <?php echo esc_html($issue['element']); ?></p>
         <?php endif; ?>
-        <?php if ($tutorial) : ?>
-            <p><a href="<?php echo esc_url($tutorial); ?>" target="_blank" rel="noopener">Tutorial</a></p>
-        <?php endif; ?>
+        <p class="leanwi-focused-issue-actions">
+            <?php if ($highlight_url) : ?>
+                <a class="button button-small" href="<?php echo esc_url($highlight_url); ?>" target="_blank" rel="noopener">View on Page</a>
+            <?php endif; ?>
+            <?php if ($tutorial) : ?>
+                <a class="button button-small" href="<?php echo esc_url($tutorial); ?>" target="_blank" rel="noopener">Tutorial</a>
+            <?php endif; ?>
+        </p>
     </article>
     <?php
 }
 
-function leanwi_acr_issue($severity, $category, $message, $detail = '', $suggestion = '', $element = '', $tutorial_key = '') {
+function leanwi_acr_issue($severity, $category, $message, $detail = '', $suggestion = '', $element = '', $tutorial_key = '', $locator = []) {
     return [
         'severity' => $severity,
         'category' => $category,
@@ -803,7 +936,116 @@ function leanwi_acr_issue($severity, $category, $message, $detail = '', $suggest
         'suggestion' => $suggestion,
         'element' => $element,
         'tutorial_key' => $tutorial_key,
+        'locator' => is_array($locator) ? $locator : [],
     ];
+}
+
+function leanwi_acr_node_locator($node) {
+    if (!($node instanceof DOMElement)) {
+        return [];
+    }
+
+    $tag = strtolower($node->nodeName);
+    $attributes = [];
+    foreach (['id', 'class', 'href', 'src', 'data-src', 'data-lazy-src', 'alt', 'name', 'type', 'title', 'aria-label', 'style'] as $attribute) {
+        if (!$node->hasAttribute($attribute)) {
+            continue;
+        }
+        $value = leanwi_acr_clean_text($node->getAttribute($attribute));
+        if ($value === '') {
+            continue;
+        }
+        $attributes[$attribute] = leanwi_acr_shorten($value, 240);
+    }
+
+    if ($tag === 'img') {
+        $src = leanwi_acr_get_image_source($node);
+        if ($src !== '') {
+            $attributes['src'] = $src;
+        }
+    }
+
+    if ($tag === 'a' && !empty($attributes['href'])) {
+        $attributes['href'] = leanwi_acr_absolute_url($attributes['href']);
+    }
+
+    if ($tag === 'a') {
+        $child_alt = [];
+        $xpath = new DOMXPath($node->ownerDocument);
+        foreach ($xpath->query('.//img[@alt]', $node) as $image) {
+            $alt = leanwi_acr_clean_text($image->getAttribute('alt'));
+            if ($alt !== '') {
+                $child_alt[] = $alt;
+            }
+        }
+        if (!empty($child_alt)) {
+            $attributes['child_alt'] = leanwi_acr_shorten(implode(' ', $child_alt), 180);
+        }
+    }
+
+    return [
+        'tag' => $tag,
+        'index' => leanwi_acr_node_tag_index($node),
+        'text' => leanwi_acr_shorten(leanwi_acr_clean_text($node->textContent), 180),
+        'attrs' => $attributes,
+        'context' => leanwi_acr_node_context($node),
+    ];
+}
+
+function leanwi_acr_node_context($node) {
+    $context = [];
+    $parent = $node->parentNode;
+
+    while ($parent instanceof DOMElement && count($context) < 6) {
+        if ($parent->getAttribute('id') === 'leanwi-acr-root') {
+            break;
+        }
+
+        $item = [
+            'tag' => strtolower($parent->nodeName),
+        ];
+
+        foreach (['id', 'class', 'role', 'aria-labelledby', 'aria-controls'] as $attribute) {
+            if (!$parent->hasAttribute($attribute)) {
+                continue;
+            }
+            $value = leanwi_acr_clean_text($parent->getAttribute($attribute));
+            if ($value !== '') {
+                $item[$attribute] = leanwi_acr_shorten($value, 180);
+            }
+        }
+
+        if (count($item) > 1) {
+            $context[] = $item;
+        }
+
+        $parent = $parent->parentNode;
+    }
+
+    return $context;
+}
+
+function leanwi_acr_node_tag_index($node) {
+    if (!($node instanceof DOMElement)) {
+        return 0;
+    }
+
+    $tag = strtolower($node->nodeName);
+    $xpath = new DOMXPath($node->ownerDocument);
+    $nodes = $xpath->query('//*[@id="leanwi-acr-root"]//' . $tag);
+    if (!$nodes || $nodes->length === 0) {
+        $nodes = $xpath->query('//' . $tag);
+    }
+
+    $index = 0;
+    foreach ($nodes as $candidate) {
+        if ($candidate === $node || (method_exists($candidate, 'isSameNode') && $candidate->isSameNode($node))) {
+            return $index;
+        }
+        $index++;
+    }
+
+    return 0;
 }
 
 function leanwi_acr_tutorial_links() {
@@ -844,12 +1086,29 @@ function leanwi_acr_get_image_source($image) {
 }
 
 function leanwi_acr_absolute_url($url) {
-    $url = trim($url);
+    $url = leanwi_acr_extract_url_like($url);
     if ($url === '' || preg_match('/^(https?:)?\/\//i', $url) || strpos($url, 'data:') === 0) {
         return $url;
     }
 
     return esc_url_raw(home_url($url[0] === '/' ? $url : '/' . $url));
+}
+
+function leanwi_acr_extract_url_like($url) {
+    $url = trim((string) $url);
+    if ($url === '') {
+        return '';
+    }
+
+    if (preg_match('/https?:\/\/[^\s\]\)\'"<>]+/i', $url, $match)) {
+        return $match[0];
+    }
+
+    if (preg_match('/\/\/[^\s\]\)\'"<>]+/i', $url, $match)) {
+        return $match[0];
+    }
+
+    return $url;
 }
 
 function leanwi_acr_is_ocr_candidate($src) {

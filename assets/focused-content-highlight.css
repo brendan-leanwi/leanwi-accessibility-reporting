@@ -1,0 +1,31 @@
+.leanwi-acr-highlight-target {
+  outline: 4px solid #1d4ed8 !important;
+  outline-offset: 4px !important;
+  box-shadow: 0 0 0 8px rgba(29, 78, 216, 0.22) !important;
+  border-radius: 2px !important;
+  scroll-margin: 140px !important;
+}
+
+a.leanwi-acr-highlight-target,
+span.leanwi-acr-highlight-target,
+strong.leanwi-acr-highlight-target {
+  display: inline-block !important;
+}
+
+.leanwi-acr-highlight-notice {
+  position: fixed;
+  z-index: 999999;
+  right: 20px;
+  bottom: 20px;
+  max-width: min(420px, calc(100vw - 40px));
+  padding: 12px 14px;
+  border-left: 5px solid #1d4ed8;
+  background: #ffffff;
+  color: #1f2937;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22);
+  font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.leanwi-acr-highlight-notice-missing {
+  border-left-color: #b45309;
+}

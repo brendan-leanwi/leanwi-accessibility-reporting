@@ -112,6 +112,13 @@
   margin: 6px 0;
 }
 
+.leanwi-focused-issue-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
 .leanwi-focused-badge {
   display: inline-block;
   min-width: 54px;

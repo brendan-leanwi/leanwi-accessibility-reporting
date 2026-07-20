@@ -7,7 +7,7 @@ Plugin Name: LEANWI Accessibility Reporting
 GitHub URI:   https://github.com/brendan-leanwi/leanwi-accessibility-reporting
 Update URI:   https://github.com/brendan-leanwi/leanwi-accessibility-reporting
 Description: Functionality to aid reporting on accessibility for your entire site.
-Version: 1.2
+Version: 1.2.1
 Author: Brendan Tuckey
 Author URI:   https://github.com/brendan-leanwi
 License:      GPL2
@@ -37,8 +37,8 @@ register_activation_hook( __FILE__, __NAMESPACE__ . '\\leanwi_accessibility_crea
 
 // Version-based update check
 function leanwi_update_check() {
-    $current_version = get_option('leanwi_accessibility_reporting_plugin_version', '1.1.3'); // Default to an old version if not set
-    $new_version = '1.2'; // Update this with the new plugin version
+    $current_version = get_option('leanwi_accessibility_reporting_plugin_version', '1.0.6'); // Default to an old version if not set
+    $new_version = '1.2.1'; // Update this with the new plugin version
 
     if (version_compare($current_version, $new_version, '<')) {
         // Run the table creation logic
@@ -157,7 +157,7 @@ function leanwi_accessibility_enqueue_admin_scripts($hook) {
             'leanwi-focused-content-report',
             plugin_dir_url(__FILE__) . 'assets/focused-content-report.css',
             [],
-            '1.1.3'
+            '1.1.5'
         );
 
         $script_dependencies = [];
@@ -181,7 +181,7 @@ function leanwi_accessibility_enqueue_admin_scripts($hook) {
             'leanwi-focused-content-report',
             plugin_dir_url(__FILE__) . 'assets/focused-content-report.js',
             $script_dependencies,
-            '1.1.3',
+            '1.1.5',
             true
         );
 
@@ -191,6 +191,55 @@ function leanwi_accessibility_enqueue_admin_scripts($hook) {
     }
 }
 add_action('admin_enqueue_scripts', __NAMESPACE__ . '\\leanwi_accessibility_enqueue_admin_scripts');
+
+function leanwi_accessibility_enqueue_frontend_highlight() {
+    if (empty($_GET['leanwi_acr_highlight']) || empty($_GET['leanwi_acr_post']) || empty($_GET['leanwi_acr_locator']) || empty($_GET['leanwi_acr_nonce'])) {
+        return;
+    }
+
+    $post_id = absint($_GET['leanwi_acr_post']);
+    if (!$post_id || !current_user_can('edit_post', $post_id)) {
+        return;
+    }
+
+    $nonce = sanitize_text_field(wp_unslash($_GET['leanwi_acr_nonce']));
+    if (!wp_verify_nonce($nonce, 'leanwi_acr_highlight_' . $post_id)) {
+        return;
+    }
+
+    $encoded_locator = sanitize_text_field(wp_unslash($_GET['leanwi_acr_locator']));
+    $encoded_locator = strtr($encoded_locator, '-_', '+/');
+    $encoded_locator .= str_repeat('=', (4 - strlen($encoded_locator) % 4) % 4);
+    $locator_json = base64_decode($encoded_locator, true);
+    if (!$locator_json) {
+        return;
+    }
+
+    $locator = json_decode($locator_json, true);
+    if (!is_array($locator) || empty($locator['tag'])) {
+        return;
+    }
+
+    wp_enqueue_style(
+        'leanwi-focused-content-highlight',
+        plugin_dir_url(__FILE__) . 'assets/focused-content-highlight.css',
+        [],
+        '1.1.5'
+    );
+
+    wp_enqueue_script(
+        'leanwi-focused-content-highlight',
+        plugin_dir_url(__FILE__) . 'assets/focused-content-highlight.js',
+        [],
+        '1.1.5',
+        true
+    );
+
+    wp_localize_script('leanwi-focused-content-highlight', 'leanwiFocusedHighlight', [
+        'locator' => $locator,
+    ]);
+}
+add_action('wp_enqueue_scripts', __NAMESPACE__ . '\\leanwi_accessibility_enqueue_frontend_highlight');
 
 // AJAX callback for fetching latest items dynamically
 function leanwi_get_latest_items_ajax() {

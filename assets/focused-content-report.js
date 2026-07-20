@@ -31,11 +31,28 @@
     element.className = "leanwi-focused-detail";
     element.textContent = `Element: ${image.element || image.src}`;
 
-    const link = document.createElement("p");
-    link.innerHTML =
-      '<a href="https://www.w3.org/WAI/tutorials/images/complex/" target="_blank" rel="noopener">Tutorial</a>';
+    const actions = document.createElement("p");
+    actions.className = "leanwi-focused-issue-actions";
+    if (image.highlight_url) {
+      const viewLink = document.createElement("a");
+      viewLink.className = "button button-small";
+      viewLink.href = image.highlight_url;
+      viewLink.target = "_blank";
+      viewLink.rel = "noopener";
+      viewLink.textContent = "View on Page";
+      actions.appendChild(viewLink);
+      actions.appendChild(document.createTextNode(" "));
+    }
 
-    article.append(meta, heading, detail, suggestion, element, link);
+    const tutorialLink = document.createElement("a");
+    tutorialLink.className = "button button-small";
+    tutorialLink.href = "https://www.w3.org/WAI/tutorials/images/complex/";
+    tutorialLink.target = "_blank";
+    tutorialLink.rel = "noopener";
+    tutorialLink.textContent = "Tutorial";
+    actions.appendChild(tutorialLink);
+
+    article.append(meta, heading, detail, suggestion, element, actions);
     return article;
   }
 
