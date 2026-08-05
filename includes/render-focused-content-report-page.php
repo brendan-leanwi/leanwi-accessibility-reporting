@@ -1,5 +1,9 @@
 <?php
 
+if (!defined('LEANWI_ACR_ENGINE_VERSION')) {
+    define('LEANWI_ACR_ENGINE_VERSION', '1.1.10');
+}
+
 function leanwi_render_focused_content_report_page() {
     if (!current_user_can('edit_posts')) {
         wp_die(esc_html__('You do not have permission to view this report.', 'leanwi-tutorial'));
@@ -26,6 +30,7 @@ function leanwi_render_focused_content_report_page() {
         <p class="description">
             This report filters the accessibility review down to items content editors can usually fix.
             It also includes an optional image text scan to find likely flyers, posters, schedules, and infographics.
+            Focused engine <?php echo esc_html(LEANWI_ACR_ENGINE_VERSION); ?>.
         </p>
 
         <form method="get" action="<?php echo esc_url(admin_url('admin.php')); ?>" class="leanwi-focused-filters">
@@ -209,11 +214,71 @@ function leanwi_acr_render_content_for_scan($post) {
     $previous_post = $GLOBALS['post'] ?? null;
     $GLOBALS['post'] = $post;
     setup_postdata($post);
+    $original_content = $post->post_content;
+    $post->post_content = leanwi_acr_prepare_content_for_scan($original_content);
     $html = apply_filters('the_content', $post->post_content);
+    $post->post_content = $original_content;
     wp_reset_postdata();
     $GLOBALS['post'] = $previous_post;
 
     return (string) $html;
+}
+
+function leanwi_acr_prepare_content_for_scan($content) {
+    $content = leanwi_acr_strip_ignored_shortcodes($content);
+    return leanwi_acr_strip_fully_disabled_divi_shortcodes($content);
+}
+
+function leanwi_acr_strip_ignored_shortcodes($content) {
+    $ignored_shortcodes = apply_filters('leanwi_acr_ignored_shortcodes', ['tockify']);
+    if (empty($ignored_shortcodes) || !is_array($ignored_shortcodes)) {
+        return $content;
+    }
+
+    foreach ($ignored_shortcodes as $shortcode) {
+        $shortcode = preg_replace('/[^A-Za-z0-9_\-]/', '', (string) $shortcode);
+        if ($shortcode === '') {
+            continue;
+        }
+
+        $content = preg_replace('/\[' . preg_quote($shortcode, '/') . '\b[^\]]*\](.*?)\[\/' . preg_quote($shortcode, '/') . '\]/is', '', (string) $content);
+        $content = preg_replace('/\[' . preg_quote($shortcode, '/') . '\b[^\]]*\/?\]/is', '', (string) $content);
+    }
+
+    return $content;
+}
+
+function leanwi_acr_strip_fully_disabled_divi_shortcodes($content) {
+    if (stripos((string) $content, 'disabled_on') === false) {
+        return $content;
+    }
+
+    $content = (string) $content;
+    $previous = null;
+    $passes = 0;
+
+    while ($previous !== $content && $passes < 20) {
+        $previous = $content;
+        $passes++;
+
+        $content = preg_replace_callback(
+            '/\[(et_pb_[a-z0-9_]+)\b(?=[^\]]*\bdisabled_on\s*=\s*(["\'])(?:on|true|1|yes)\s*\|\s*(?:on|true|1|yes)\s*\|\s*(?:on|true|1|yes)(?:\s*\|[^"\']*)?\2)([^\]]*)\](.*?)\[\/\1\]/is',
+            'leanwi_acr_remove_divi_shortcode_block',
+            $content
+        );
+
+        $content = preg_replace_callback(
+            '/\[(et_pb_[a-z0-9_]+)\b(?=[^\]]*\bdisabled_on\s*=\s*(["\'])(?:on|true|1|yes)\s*\|\s*(?:on|true|1|yes)\s*\|\s*(?:on|true|1|yes)(?:\s*\|[^"\']*)?\2)([^\]]*)\/\]/is',
+            'leanwi_acr_remove_divi_shortcode_block',
+            $content
+        );
+    }
+
+    return $content;
+}
+
+function leanwi_acr_remove_divi_shortcode_block($matches) {
+    return '';
 }
 
 function leanwi_acr_load_html($html) {
@@ -233,6 +298,7 @@ function leanwi_acr_load_html($html) {
 
 function leanwi_acr_check_headings($xpath, &$issues) {
     $headings = $xpath->query('//h1|//h2|//h3|//h4|//h5|//h6');
+    $h1_count = $xpath->query('//h1')->length;
     $previous_level = 0;
 
     foreach ($headings as $heading) {
@@ -241,13 +307,13 @@ function leanwi_acr_check_headings($xpath, &$issues) {
         $element = 'h' . $level . ': ' . leanwi_acr_shorten($text, 80);
         $locator = leanwi_acr_node_locator($heading);
 
-        if ($level === 1) {
+        if ($level === 1 && $h1_count > 1) {
             $issues[] = leanwi_acr_issue(
                 'warning',
                 'Headings',
-                'H1 heading found inside the page content.',
-                'Most WordPress themes already use the page title as the H1.',
-                'Use H2 for main sections inside the editor unless this page intentionally needs an H1 in the content area.',
+                'Multiple H1 headings found inside the page content.',
+                'This scan found ' . $h1_count . ' H1 headings in the editable content area.',
+                'Use one H1 for the page title, then H2 for main sections.',
                 $element,
                 'headings',
                 $locator
@@ -396,7 +462,7 @@ function leanwi_acr_check_links($xpath, &$issues) {
         $element = 'a: ' . leanwi_acr_shorten($href, 100);
         $locator = leanwi_acr_node_locator($link);
 
-        if ($text === '') {
+        if ($text === '' && !leanwi_acr_has_named_duplicate_link($link, $href)) {
             $issues[] = leanwi_acr_issue(
                 'fix',
                 'Links',
@@ -472,6 +538,31 @@ function leanwi_acr_check_links($xpath, &$issues) {
     }
 }
 
+function leanwi_acr_has_named_duplicate_link($link, $href) {
+    $target_href = esc_url_raw(leanwi_acr_absolute_url($href));
+    if ($target_href === '') {
+        return false;
+    }
+
+    $xpath = new DOMXPath($link->ownerDocument);
+    foreach ($xpath->query('//a[@href]') as $candidate) {
+        if ($candidate === $link || (method_exists($candidate, 'isSameNode') && $candidate->isSameNode($link))) {
+            continue;
+        }
+
+        $candidate_href = esc_url_raw(leanwi_acr_absolute_url($candidate->getAttribute('href')));
+        if ($candidate_href !== $target_href) {
+            continue;
+        }
+
+        if (leanwi_acr_link_accessible_text($candidate) !== '') {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 function leanwi_acr_link_accessible_text($link) {
     $label = leanwi_acr_aria_labelledby_text($link);
     if ($label !== '') {
@@ -540,6 +631,9 @@ function leanwi_acr_check_tables($xpath, &$issues) {
         $has_th = $table_xpath->query('.//th', $table)->length > 0;
         $has_caption = $table_xpath->query('.//caption', $table)->length > 0;
         $rows = $table_xpath->query('.//tr', $table)->length;
+        if (leanwi_acr_should_skip_table($table, $table_xpath, $rows, $has_th, $has_caption)) {
+            continue;
+        }
 
         if ($rows > 1 && !$has_th) {
             $issues[] = leanwi_acr_issue(
@@ -569,6 +663,92 @@ function leanwi_acr_check_tables($xpath, &$issues) {
     }
 }
 
+function leanwi_acr_should_skip_table($table, $table_xpath, $rows, $has_th, $has_caption) {
+    if ($rows < 1) {
+        return true;
+    }
+
+    if (leanwi_acr_is_hidden_content($table)) {
+        return true;
+    }
+
+    if ($has_th || $has_caption) {
+        return false;
+    }
+
+    $max_cells_in_row = 0;
+    foreach ($table_xpath->query('.//tr', $table) as $row) {
+        $cell_count = $table_xpath->query('./th|./td', $row)->length;
+        $max_cells_in_row = max($max_cells_in_row, $cell_count);
+    }
+
+    return $max_cells_in_row <= 1;
+}
+
+function leanwi_acr_is_hidden_content($node) {
+    while ($node instanceof DOMElement) {
+        if ($node->hasAttribute('hidden') || strtolower($node->getAttribute('aria-hidden')) === 'true') {
+            return true;
+        }
+
+        $styles = leanwi_acr_parse_style($node->getAttribute('style'));
+        if (($styles['display'] ?? '') === 'none' || ($styles['visibility'] ?? '') === 'hidden') {
+            return true;
+        }
+
+        if (leanwi_acr_has_all_device_hidden_classes($node)) {
+            return true;
+        }
+
+        $node = $node->parentNode;
+    }
+
+    return false;
+}
+
+function leanwi_acr_has_all_device_hidden_classes($node) {
+    $class = strtolower($node->getAttribute('class'));
+    if ($class === '') {
+        return false;
+    }
+
+    $classes = preg_split('/\s+/', $class);
+    $class_map = array_fill_keys($classes, true);
+
+    foreach (['et_pb_section', 'et_pb_row', 'et_pb_column', 'et_pb_module'] as $prefix) {
+        if (isset($class_map[$prefix . '_hidden'], $class_map[$prefix . '_hidden_tablet'], $class_map[$prefix . '_hidden_phone'])) {
+            return true;
+        }
+    }
+
+    foreach ($classes as $class_name) {
+        if (preg_match('/^(.+)_hidden$/', $class_name, $matches)) {
+            $prefix = $matches[1];
+            if (isset($class_map[$prefix . '_hidden_tablet'], $class_map[$prefix . '_hidden_phone'])) {
+                return true;
+            }
+        }
+    }
+
+    $desktop_hidden = false;
+    $tablet_hidden = false;
+    $phone_hidden = false;
+
+    foreach ($classes as $class_name) {
+        if (preg_match('/(^|[_-])(desktop|computer)(_)?hidden$|(^|[_-])hidden(_|-)?desktop$|^et_pb_hide_on_desktop$/', $class_name)) {
+            $desktop_hidden = true;
+        }
+        if (preg_match('/(^|[_-])tablet(_)?hidden$|(^|[_-])hidden(_|-)?tablet$|^et_pb_hide_on_tablet$/', $class_name)) {
+            $tablet_hidden = true;
+        }
+        if (preg_match('/(^|[_-])(phone|mobile)(_)?hidden$|(^|[_-])hidden(_|-)?(phone|mobile)$|^et_pb_hide_on_phone$/', $class_name)) {
+            $phone_hidden = true;
+        }
+    }
+
+    return $desktop_hidden && $tablet_hidden && $phone_hidden;
+}
+
 function leanwi_acr_check_forms($xpath, &$issues) {
     $labels = [];
     foreach ($xpath->query('//label[@for]') as $label) {
@@ -579,6 +759,9 @@ function leanwi_acr_check_forms($xpath, &$issues) {
     foreach ($fields as $field) {
         $type = strtolower($field->getAttribute('type'));
         if ($field->nodeName === 'input' && in_array($type, ['hidden', 'submit', 'button', 'reset', 'image'], true)) {
+            continue;
+        }
+        if (leanwi_acr_is_hidden_content($field)) {
             continue;
         }
 
