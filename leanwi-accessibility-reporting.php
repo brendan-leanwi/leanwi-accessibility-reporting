@@ -7,7 +7,7 @@ Plugin Name: LEANWI Accessibility Reporting
 GitHub URI:   https://github.com/brendan-leanwi/leanwi-accessibility-reporting
 Update URI:   https://github.com/brendan-leanwi/leanwi-accessibility-reporting
 Description: Functionality to aid reporting on accessibility for your entire site.
-Version: 1.2.3
+Version: 1.3.0
 Author: Brendan Tuckey
 Author URI:   https://github.com/brendan-leanwi
 License:      GPL2
@@ -20,6 +20,7 @@ Tested up to: 7.0.2
 // Define plugin constants
 define('LEANWI_AR_PATH', plugin_dir_path(__FILE__));
 define('LEANWI_AR_URL', plugin_dir_url(__FILE__));
+define('LEANWI_AR_VERSION', '1.3.0');
 
 require_once LEANWI_AR_PATH . 'includes/db-setup.php';
 require_once LEANWI_AR_PATH . 'includes/render-site-scan-page.php';
@@ -37,8 +38,8 @@ register_activation_hook( __FILE__, __NAMESPACE__ . '\\leanwi_accessibility_crea
 
 // Version-based update check
 function leanwi_update_check() {
-    $current_version = get_option('leanwi_accessibility_reporting_plugin_version', '1.7'); // Default to an old version if not set
-    $new_version = '1.2.3'; // Update this with the new plugin version
+    $current_version = get_option('leanwi_accessibility_reporting_plugin_version', '1.0.6'); // Default to an old version if not set
+    $new_version = LEANWI_AR_VERSION; // Update this with the new plugin version
 
     if (version_compare($current_version, $new_version, '<')) {
         // Run the table creation logic
@@ -119,12 +120,115 @@ add_action('admin_menu', function () {
     );
 });
 
+// Frontend accessibility fixes settings page.
+add_action('admin_menu', function () {
+    add_submenu_page(
+        'accessibility_checker',
+        'Frontend Accessibility Fixes',
+        'Frontend Fixes',
+        'manage_options',
+        'leanwi-frontend-fixes',
+        __NAMESPACE__ . '\\leanwi_render_frontend_fixes_page'
+    );
+});
+
+function leanwi_frontend_fixes_option_name() {
+    return 'leanwi_accessibility_frontend_fixes_enabled';
+}
+
+function leanwi_frontend_fixes_default_enabled() {
+    return (bool) apply_filters('leanwi_accessibility_frontend_fixes_default_enabled', false);
+}
+
+function leanwi_frontend_fixes_enabled() {
+    $default = leanwi_frontend_fixes_default_enabled() ? '1' : '0';
+    $value = get_option(leanwi_frontend_fixes_option_name(), $default);
+    $enabled = in_array($value, ['1', 1, true, 'true', 'yes', 'on'], true);
+
+    return (bool) apply_filters('leanwi_accessibility_frontend_fixes_enabled', $enabled);
+}
+
+function leanwi_handle_frontend_fixes_settings() {
+    if (empty($_POST['leanwi_frontend_fixes_settings'])) {
+        return;
+    }
+
+    if (!current_user_can('manage_options')) {
+        wp_die(esc_html__('You do not have permission to update these settings.', 'leanwi-tutorial'));
+    }
+
+    check_admin_referer('leanwi_frontend_fixes_settings');
+
+    $enabled = !empty($_POST['leanwi_frontend_fixes_enabled']) ? '1' : '0';
+    update_option(leanwi_frontend_fixes_option_name(), $enabled);
+
+    wp_safe_redirect(add_query_arg([
+        'page' => 'leanwi-frontend-fixes',
+        'settings-updated' => 'true',
+    ], admin_url('admin.php')));
+    exit;
+}
+add_action('admin_init', __NAMESPACE__ . '\\leanwi_handle_frontend_fixes_settings');
+
+function leanwi_render_frontend_fixes_page() {
+    if (!current_user_can('manage_options')) {
+        wp_die(esc_html__('You do not have permission to view this page.', 'leanwi-tutorial'));
+    }
+
+    $enabled = leanwi_frontend_fixes_enabled();
+    $scripts = leanwi_frontend_fix_scripts();
+    ?>
+    <div class="wrap">
+        <h1>Frontend Accessibility Fixes</h1>
+
+        <?php if (!empty($_GET['settings-updated'])) : ?>
+            <div class="notice notice-success is-dismissible">
+                <p>Frontend accessibility fix settings saved.</p>
+            </div>
+        <?php endif; ?>
+
+        <p>
+            These plugin-managed fixes replace the matching Divi child theme accessibility CSS and JavaScript handles.
+            Leave this disabled until you are ready for this plugin to take over those front-end fixes on this site.
+        </p>
+
+        <form method="post" action="<?php echo esc_url(admin_url('admin.php?page=leanwi-frontend-fixes')); ?>">
+            <?php wp_nonce_field('leanwi_frontend_fixes_settings'); ?>
+            <input type="hidden" name="leanwi_frontend_fixes_settings" value="1">
+
+            <table class="form-table" role="presentation">
+                <tbody>
+                    <tr>
+                        <th scope="row">Plugin-managed frontend fixes</th>
+                        <td>
+                            <label>
+                                <input type="checkbox" name="leanwi_frontend_fixes_enabled" value="1" <?php checked($enabled); ?>>
+                                Enable frontend accessibility fixes from this plugin
+                            </label>
+                            <p class="description">
+                                When enabled, the plugin replaces known child-theme handles such as
+                                <code>wvls-accessibility-fixes</code> and <code>wvls-divi-tabs-accessibility</code>.
+                            </p>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <?php submit_button('Save Frontend Fixes Settings'); ?>
+        </form>
+
+        <h2>Bundled fixes</h2>
+        <p>This build includes one CSS file and <?php echo esc_html((string) count($scripts)); ?> JavaScript files. Divi 5 test files are not included.</p>
+    </div>
+    <?php
+}
+
 function leanwi_accessibility_enqueue_admin_scripts($hook) {
     // Load only if current page is the Site Scan page
     if (isset($_GET['page']) && $_GET['page'] === 'leanwi-site-scan') {
         wp_enqueue_script(
             'leanwi-accessibility-make-snapshot',
-            plugin_dir_url(__FILE__) . 'assets/admin-make-snapshot.js',
+            LEANWI_AR_URL . 'assets/admin-make-snapshot.js',
             ['jquery'],
             '1.0',
             true
@@ -155,9 +259,9 @@ function leanwi_accessibility_enqueue_admin_scripts($hook) {
     if (isset($_GET['page']) && $_GET['page'] === 'leanwi-focused-content-report') {
         wp_enqueue_style(
             'leanwi-focused-content-report',
-            plugin_dir_url(__FILE__) . 'assets/focused-content-report.css',
+            LEANWI_AR_URL . 'assets/focused-content-report.css',
             [],
-            '1.1.5'
+            LEANWI_AR_VERSION
         );
 
         $script_dependencies = [];
@@ -179,9 +283,9 @@ function leanwi_accessibility_enqueue_admin_scripts($hook) {
 
         wp_enqueue_script(
             'leanwi-focused-content-report',
-            plugin_dir_url(__FILE__) . 'assets/focused-content-report.js',
+            LEANWI_AR_URL . 'assets/focused-content-report.js',
             $script_dependencies,
-            '1.1.5',
+            LEANWI_AR_VERSION,
             true
         );
 
@@ -222,16 +326,16 @@ function leanwi_accessibility_enqueue_frontend_highlight() {
 
     wp_enqueue_style(
         'leanwi-focused-content-highlight',
-        plugin_dir_url(__FILE__) . 'assets/focused-content-highlight.css',
+        LEANWI_AR_URL . 'assets/focused-content-highlight.css',
         [],
-        '1.1.5'
+        LEANWI_AR_VERSION
     );
 
     wp_enqueue_script(
         'leanwi-focused-content-highlight',
-        plugin_dir_url(__FILE__) . 'assets/focused-content-highlight.js',
+        LEANWI_AR_URL . 'assets/focused-content-highlight.js',
         [],
-        '1.1.5',
+        LEANWI_AR_VERSION,
         true
     );
 
@@ -240,6 +344,96 @@ function leanwi_accessibility_enqueue_frontend_highlight() {
     ]);
 }
 add_action('wp_enqueue_scripts', __NAMESPACE__ . '\\leanwi_accessibility_enqueue_frontend_highlight');
+
+function leanwi_frontend_fix_scripts() {
+    return apply_filters('leanwi_accessibility_frontend_fix_scripts', [
+        'divi-accordion-accessibility.js',
+        'divi-blurb-accessibility.js',
+        'divi-gallery-accessibility.js',
+        'divi-image-slider-accessibility.js',
+        'divi-search-accessibility.js',
+        'divi-tabs-accessibility.js',
+        'divi-toggle-accessibility.js',
+        'divi-video-slider-accessibility.js',
+        'events-calendar-accessibility.js',
+        'events-carousel-accessibility.js',
+        'events-feed-accessibility.js',
+        'peeaye-tabs-maker-accessibility.js',
+        'skip-link-focus-for-sr-accessibility-fix.js',
+        'supreme-advanced-tabs-accessibility.js',
+        'supreme-blog-carousel-accessibility.js',
+    ]);
+}
+
+function leanwi_frontend_fix_script_dependencies($script) {
+    $jquery_scripts = [
+        'events-calendar-accessibility.js',
+        'events-carousel-accessibility.js',
+    ];
+
+    return in_array($script, $jquery_scripts, true) ? ['jquery'] : [];
+}
+
+function leanwi_enqueue_frontend_fix_style($handle, $relative_path) {
+    $path = LEANWI_AR_PATH . $relative_path;
+    if (!file_exists($path)) {
+        return;
+    }
+
+    wp_dequeue_style($handle);
+    wp_deregister_style($handle);
+
+    wp_enqueue_style(
+        $handle,
+        LEANWI_AR_URL . $relative_path,
+        [],
+        (string) filemtime($path)
+    );
+}
+
+function leanwi_enqueue_frontend_fix_script($handle, $relative_path, $dependencies = []) {
+    $path = LEANWI_AR_PATH . $relative_path;
+    if (!file_exists($path)) {
+        return;
+    }
+
+    wp_dequeue_script($handle);
+    wp_deregister_script($handle);
+
+    wp_enqueue_script(
+        $handle,
+        LEANWI_AR_URL . $relative_path,
+        $dependencies,
+        (string) filemtime($path),
+        true
+    );
+}
+
+function leanwi_enqueue_frontend_accessibility_fixes() {
+    if (is_admin() || !leanwi_frontend_fixes_enabled()) {
+        return;
+    }
+
+    leanwi_enqueue_frontend_fix_style(
+        'wvls-accessibility-fixes',
+        'assets/frontend-fixes/css/accessibility-fixes.css'
+    );
+
+    foreach (leanwi_frontend_fix_scripts() as $script) {
+        $script = basename((string) $script);
+        if ($script === '') {
+            continue;
+        }
+
+        $handle = 'wvls-' . basename($script, '.js');
+        leanwi_enqueue_frontend_fix_script(
+            $handle,
+            'assets/frontend-fixes/js/' . $script,
+            leanwi_frontend_fix_script_dependencies($script)
+        );
+    }
+}
+add_action('wp_enqueue_scripts', __NAMESPACE__ . '\\leanwi_enqueue_frontend_accessibility_fixes', 999);
 
 // AJAX callback for fetching latest items dynamically
 function leanwi_get_latest_items_ajax() {

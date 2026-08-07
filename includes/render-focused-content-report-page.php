@@ -1,7 +1,7 @@
 <?php
 
 if (!defined('LEANWI_ACR_ENGINE_VERSION')) {
-    define('LEANWI_ACR_ENGINE_VERSION', '1.1.12');
+    define('LEANWI_ACR_ENGINE_VERSION', '1.3.0');
 }
 
 function leanwi_render_focused_content_report_page() {

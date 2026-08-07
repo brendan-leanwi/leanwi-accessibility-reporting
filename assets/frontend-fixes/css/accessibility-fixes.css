@@ -1,0 +1,39 @@
+/* Toggle and Accordion CSS */
+.et_pb_toggle_title button {
+  all: unset;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  display: inline;
+}
+.et_pb_toggle_title button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+/* Slider CSS */
+.custom-slider-controls {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  position: absolute;  /* lock inside slider */
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+}
+
+.custom-slider-controls button {
+  padding: 0.4em 0.8em;
+  border: 1px solid #ccc;
+  background: #fff;
+  cursor: pointer;
+  border-radius: 4px;
+  font-weight: bold;
+}
+
+.custom-slider-controls button[aria-current="true"] {
+  background: #4b6734;
+  color: #FFF;
+  border-color: #4b6734;
+}
