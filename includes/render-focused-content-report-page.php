@@ -1,7 +1,7 @@
 <?php
 
 if (!defined('LEANWI_ACR_ENGINE_VERSION')) {
-    define('LEANWI_ACR_ENGINE_VERSION', '1.1.10');
+    define('LEANWI_ACR_ENGINE_VERSION', '1.1.12');
 }
 
 function leanwi_render_focused_content_report_page() {
@@ -752,25 +752,31 @@ function leanwi_acr_has_all_device_hidden_classes($node) {
 function leanwi_acr_check_forms($xpath, &$issues) {
     $labels = [];
     foreach ($xpath->query('//label[@for]') as $label) {
-        $labels[$label->getAttribute('for')] = true;
+        $for = trim($label->getAttribute('for'));
+        if ($for !== '') {
+            $labels[$for] = true;
+        }
     }
 
     $fields = $xpath->query('//input|//select|//textarea');
     foreach ($fields as $field) {
-        $type = strtolower($field->getAttribute('type'));
-        if ($field->nodeName === 'input' && in_array($type, ['hidden', 'submit', 'button', 'reset', 'image'], true)) {
+        if (leanwi_acr_is_ignored_form_control($field)) {
             continue;
         }
         if (leanwi_acr_is_hidden_content($field)) {
             continue;
         }
+        if (leanwi_acr_is_known_labeled_widget_field($field)) {
+            continue;
+        }
 
-        $id = $field->getAttribute('id');
+        $id = trim($field->getAttribute('id'));
         $has_label = ($id && isset($labels[$id]))
             || $field->hasAttribute('aria-label')
             || $field->hasAttribute('aria-labelledby')
             || $field->hasAttribute('title')
-            || leanwi_acr_has_ancestor_tag($field, 'label');
+            || leanwi_acr_has_ancestor_tag($field, 'label')
+            || leanwi_acr_has_nearby_label($field);
 
         if (!$has_label) {
             $locator = leanwi_acr_node_locator($field);
@@ -790,6 +796,106 @@ function leanwi_acr_check_forms($xpath, &$issues) {
             );
         }
     }
+}
+
+function leanwi_acr_has_nearby_label($field) {
+    if (leanwi_acr_has_previous_label($field)) {
+        return true;
+    }
+
+    return leanwi_acr_has_preceding_label_for_next_form_control($field);
+}
+
+function leanwi_acr_has_previous_label($field) {
+    $node = $field->previousSibling;
+
+    while ($node) {
+        if ($node instanceof DOMCharacterData) {
+            if (leanwi_acr_clean_text($node->textContent) !== '') {
+                return false;
+            }
+            $node = $node->previousSibling;
+            continue;
+        }
+
+        if ($node instanceof DOMElement) {
+            $tag = strtolower($node->nodeName);
+            if ($tag === 'label') {
+                return leanwi_acr_clean_text($node->textContent) !== '';
+            }
+            if (in_array($tag, ['br', 'script', 'style'], true)) {
+                $node = $node->previousSibling;
+                continue;
+            }
+            return false;
+        }
+
+        $node = $node->previousSibling;
+    }
+
+    return false;
+}
+
+function leanwi_acr_has_preceding_label_for_next_form_control($field) {
+    if (!($field instanceof DOMElement) || !method_exists($field, 'getNodePath')) {
+        return false;
+    }
+
+    $form = leanwi_acr_nearest_ancestor_element($field, 'form');
+    if (!$form) {
+        return false;
+    }
+
+    $field_path = $field->getNodePath();
+    $xpath = new DOMXPath($field->ownerDocument);
+    $last_label = '';
+
+    foreach ($xpath->query('.//label|.//input|.//select|.//textarea', $form) as $node) {
+        if ($node instanceof DOMElement && method_exists($node, 'getNodePath') && $node->getNodePath() === $field_path) {
+            return $last_label !== '';
+        }
+
+        $tag = strtolower($node->nodeName);
+        if ($tag === 'label') {
+            $last_label = leanwi_acr_clean_text($node->textContent);
+            continue;
+        }
+
+        if (in_array($tag, ['input', 'select', 'textarea'], true) && !leanwi_acr_is_ignored_form_control($node)) {
+            $last_label = '';
+        }
+    }
+
+    return false;
+}
+
+function leanwi_acr_is_known_labeled_widget_field($field) {
+    if (!($field instanceof DOMElement)) {
+        return false;
+    }
+
+    $form = leanwi_acr_nearest_ancestor_element($field, 'form');
+    if (!$form) {
+        return false;
+    }
+
+    $class = ' ' . strtolower($form->getAttribute('class')) . ' ';
+    $action = strtolower($form->getAttribute('action'));
+    $is_biblio_search = strpos($class, ' biblio-search ') !== false
+        || strpos($action, 'bibliocommons.com/search') !== false;
+
+    if (!$is_biblio_search) {
+        return false;
+    }
+
+    $xpath = new DOMXPath($field->ownerDocument);
+    foreach ($xpath->query('.//label', $form) as $label) {
+        if (leanwi_acr_clean_text($label->textContent) !== '') {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 function leanwi_acr_check_buttons($xpath, &$issues) {
@@ -1331,6 +1437,31 @@ function leanwi_acr_has_ancestor_tag($node, $tag) {
         $parent = $parent->parentNode;
     }
     return false;
+}
+
+function leanwi_acr_nearest_ancestor_element($node, $tag) {
+    $parent = $node->parentNode;
+    $target = strtolower($tag);
+
+    while ($parent) {
+        if ($parent instanceof DOMElement && strtolower($parent->nodeName) === $target) {
+            return $parent;
+        }
+        $parent = $parent->parentNode;
+    }
+
+    return null;
+}
+
+function leanwi_acr_is_ignored_form_control($field) {
+    if (!($field instanceof DOMElement)) {
+        return true;
+    }
+
+    $tag = strtolower($field->nodeName);
+    $type = strtolower($field->getAttribute('type'));
+
+    return $tag === 'input' && in_array($type, ['hidden', 'submit', 'button', 'reset', 'image'], true);
 }
 
 function leanwi_acr_text_with_breaks($node) {
