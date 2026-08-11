@@ -2,7 +2,14 @@ document.addEventListener('DOMContentLoaded', function () {
 (function () {
   function getHashFromElement(el) {
     var link = el.closest && el.closest('a[href^="#"]');
-    if (link) return link.getAttribute('href');
+    if (link) {
+      var href = link.getAttribute('href');
+
+      // A bare "#" is commonly used as a JavaScript control placeholder.
+      // Leave it alone so components such as Divi gallery pagination can
+      // receive the click and run their own event handlers.
+      return href && href.length > 1 ? href : null;
+    }
 
     var clickable = el.closest && el.closest('.et_clickable');
     if (clickable && window.et_link_options_data) {

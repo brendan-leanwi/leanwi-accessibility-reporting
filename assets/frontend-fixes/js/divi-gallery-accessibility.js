@@ -1,27 +1,5 @@
-// This script improves the image descriptions
 document.addEventListener("DOMContentLoaded", function () {
-  const galleryLinks = document.querySelectorAll(".et_pb_gallery_item a");
-
-  galleryLinks.forEach(link => {
-    const img = link.querySelector("img");
-
-    if (img) {
-      const altText = img.getAttribute("alt")?.trim();
-
-      // If alt text exists and is more descriptive than the current aria-label, use it
-      if (altText && altText.length > 0) {
-        link.setAttribute("aria-label", altText);
-      } else {
-        // If no alt, remove misleading aria-label
-        link.removeAttribute("aria-label");
-      }
-    }
-  });
-});
-
-  // This script improves the pagenation functionality for screen readers
-document.addEventListener("DOMContentLoaded", function () {
-  // --- Fix gallery image link aria-labels ---
+  // Improve gallery image link descriptions.
   const galleryLinks = document.querySelectorAll(".et_pb_gallery_item a");
   galleryLinks.forEach(link => {
     const img = link.querySelector("img");
@@ -35,30 +13,53 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   });
 
-  // --- Improve gallery pagination accessibility ---
+  // Improve gallery pagination semantics without replacing Divi's handlers.
   const paginations = document.querySelectorAll(".et_pb_gallery_pagination");
   paginations.forEach(pagination => {
     pagination.setAttribute("role", "navigation");
     pagination.setAttribute("aria-label", "Gallery pages");
 
-    const links = pagination.querySelectorAll("a");
+    function updatePaginationState() {
+      const links = pagination.querySelectorAll("a[data-page]");
 
-    links.forEach(link => {
-      const page = link.dataset.page;
+      links.forEach(link => {
+        const page = link.dataset.page;
 
-      if (!page) return;
+        if (page === "prev") {
+          link.setAttribute("aria-label", "Previous page");
+        } else if (page === "next") {
+          link.setAttribute("aria-label", "Next page");
+        } else {
+          link.setAttribute("aria-label", `Go to page ${page}`);
 
-      if (page === "prev") {
-        link.setAttribute("aria-label", "Previous page");
-      } else if (page === "next") {
-        link.setAttribute("aria-label", "Next page");
-      } else {
-        link.setAttribute("aria-label", `Go to page ${page}`);
-
-        // Mark the active page
-        if (link.classList.contains("active")) {
-          link.setAttribute("aria-current", "page");
+          if (link.classList.contains("active")) {
+            link.setAttribute("aria-current", "page");
+          } else {
+            link.removeAttribute("aria-current");
+          }
         }
+      });
+    }
+
+    updatePaginationState();
+
+    // Divi changes the active class after pagination. Keep aria-current in sync.
+    const observer = new MutationObserver(updatePaginationState);
+    observer.observe(pagination, {
+      attributes: true,
+      attributeFilter: ["class"],
+      childList: true,
+      subtree: true
+    });
+
+    // Enter activates links natively. Also support Space for users who treat
+    // these page links like pagination buttons.
+    pagination.addEventListener("keydown", function (event) {
+      const link = event.target.closest && event.target.closest("a[data-page]");
+
+      if (link && event.key === " ") {
+        event.preventDefault();
+        link.click();
       }
     });
   });
