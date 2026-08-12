@@ -2,6 +2,22 @@ document.addEventListener("DOMContentLoaded", function () {
   const sliders = document.querySelectorAll(".et_pb_slider");
 
   sliders.forEach((slider) => {
+    initializeAccessibleSlider(slider);
+  });
+
+  function initializeAccessibleSlider(slider, attempt = 0) {
+    const $ = window.jQuery;
+    const diviSlider = $ && $.data(slider, "et_pb_simple_slider");
+
+    // Divi initializes its sliders on DOM ready too. Wait for its native
+    // slider instance so the custom controls never compete with Divi.
+    if (!diviSlider || typeof diviSlider.et_slider_move_to !== "function") {
+      if (attempt < 50) {
+        window.setTimeout(() => initializeAccessibleSlider(slider, attempt + 1), 100);
+      }
+      return;
+    }
+
     const slides = slider.querySelectorAll(".et_pb_slide");
     if (!slides.length) return;
 
@@ -15,10 +31,9 @@ document.addEventListener("DOMContentLoaded", function () {
       btn.setAttribute("aria-label",
                        `Go to slide ${index + 1} of ${slides.length} total slides`);
       btn.setAttribute("data-slide-index", index);
-      if (index === 0) btn.setAttribute("aria-current", "true");
 
       btn.addEventListener("click", () => {
-        changeSlide(index);
+        activateSlide(index);
         btn.focus();
       });
 
@@ -35,18 +50,43 @@ document.addEventListener("DOMContentLoaded", function () {
 
     let currentIndex = 0;
 
-    function changeSlide(newIndex) {
+    function syncSlideState() {
+      const activeSlide = slider.querySelector(".et_pb_slide.et-pb-active-slide");
+      const activeIndex = Array.prototype.indexOf.call(slides, activeSlide);
+
+      if (activeIndex < 0) return;
+
+      currentIndex = activeIndex;
+
       slides.forEach((slide, i) => {
-        slide.style.display = i === newIndex ? "block" : "none";
-        slide.setAttribute("aria-hidden", i === newIndex ? "false" : "true");
+        slide.setAttribute("aria-hidden", i === activeIndex ? "false" : "true");
         slide.querySelectorAll("img").forEach(img => img.removeAttribute("aria-hidden"));
       });
-      buttons.forEach((btn, i) => btn.setAttribute("aria-current", i === newIndex ? "true" : "false"));
-      slider.setAttribute("data-active-slide", `et_pb_slide_${newIndex}`);
-      currentIndex = newIndex;
+
+      buttons.forEach((btn, i) => {
+        btn.setAttribute("aria-current", i === activeIndex ? "true" : "false");
+      });
     }
 
-    changeSlide(0);
+    function activateSlide(newIndex) {
+      if (diviSlider.et_animation_running || newIndex === currentIndex) return;
+
+      // Use Divi's native transition so it updates active classes, sizing,
+      // image centering, animation state, and any automatic rotation timer.
+      diviSlider.et_slider_move_to(newIndex);
+    }
+
+    syncSlideState();
+
+    // Keep the accessible state aligned when Divi changes slides through
+    // autoplay, swipe gestures, arrows, or the custom numbered controls.
+    const slideObserver = new MutationObserver(syncSlideState);
+    slides.forEach((slide) => {
+      slideObserver.observe(slide, {
+        attributes: true,
+        attributeFilter: ["class"]
+      });
+    });
 
     function focusFirstInSlide(slide) {
       const focusable = slide.querySelector(
@@ -110,7 +150,7 @@ document.addEventListener("DOMContentLoaded", function () {
         buttons[currentIndex].focus();
       }
     });
-  });
+  }
 });
   
 // Add event listener for skip link keybaord focus
