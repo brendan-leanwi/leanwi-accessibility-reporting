@@ -7,7 +7,7 @@ Plugin Name: LEANWI Accessibility Reporting
 GitHub URI:   https://github.com/brendan-leanwi/leanwi-accessibility-reporting
 Update URI:   https://github.com/brendan-leanwi/leanwi-accessibility-reporting
 Description: Functionality to aid reporting on accessibility for your entire site.
-Version: 1.3.2
+Version: 1.3.5
 Author: Brendan Tuckey
 Author URI:   https://github.com/brendan-leanwi
 License:      GPL2
@@ -20,7 +20,7 @@ Tested up to: 7.0.2
 // Define plugin constants
 define('LEANWI_AR_PATH', plugin_dir_path(__FILE__));
 define('LEANWI_AR_URL', plugin_dir_url(__FILE__));
-define('LEANWI_AR_VERSION', '1.3.0');
+define('LEANWI_AR_VERSION', '1.3.5');
 
 require_once LEANWI_AR_PATH . 'includes/db-setup.php';
 require_once LEANWI_AR_PATH . 'includes/render-site-scan-page.php';
@@ -257,11 +257,16 @@ function leanwi_accessibility_enqueue_admin_scripts($hook) {
     }
 
     if (isset($_GET['page']) && $_GET['page'] === 'leanwi-focused-content-report') {
+        $focused_css_path = LEANWI_AR_PATH . 'assets/focused-content-report.css';
+        $focused_js_path = LEANWI_AR_PATH . 'assets/focused-content-report.js';
+        $focused_css_version = file_exists($focused_css_path) ? (string) filemtime($focused_css_path) : LEANWI_AR_VERSION;
+        $focused_js_version = file_exists($focused_js_path) ? (string) filemtime($focused_js_path) : LEANWI_AR_VERSION;
+
         wp_enqueue_style(
             'leanwi-focused-content-report',
             LEANWI_AR_URL . 'assets/focused-content-report.css',
             [],
-            LEANWI_AR_VERSION
+            $focused_css_version
         );
 
         $script_dependencies = [];
@@ -285,12 +290,14 @@ function leanwi_accessibility_enqueue_admin_scripts($hook) {
             'leanwi-focused-content-report',
             LEANWI_AR_URL . 'assets/focused-content-report.js',
             $script_dependencies,
-            LEANWI_AR_VERSION,
+            $focused_js_version,
             true
         );
 
         wp_localize_script('leanwi-focused-content-report', 'leanwiFocusedReport', [
             'ocrMinWords' => 10,
+            'scriptVersion' => LEANWI_AR_VERSION,
+            'assetVersion' => $focused_js_version,
         ]);
     }
 }

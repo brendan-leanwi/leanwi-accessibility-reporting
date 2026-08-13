@@ -1,7 +1,7 @@
 <?php
 
 if (!defined('LEANWI_ACR_ENGINE_VERSION')) {
-    define('LEANWI_ACR_ENGINE_VERSION', '1.3.0');
+    define('LEANWI_ACR_ENGINE_VERSION', '1.3.5');
 }
 
 function leanwi_render_focused_content_report_page() {
@@ -298,27 +298,49 @@ function leanwi_acr_load_html($html) {
 
 function leanwi_acr_check_headings($xpath, &$issues) {
     $headings = $xpath->query('//h1|//h2|//h3|//h4|//h5|//h6');
-    $h1_count = $xpath->query('//h1')->length;
+    $h1_nodes = [];
+    $h1_texts = [];
     $previous_level = 0;
 
+    foreach ($xpath->query('//h1') as $h1) {
+        if (leanwi_acr_is_hidden_content($h1)) {
+            continue;
+        }
+
+        $text = leanwi_acr_clean_text($h1->textContent);
+        if ($text === '') {
+            continue;
+        }
+
+        $h1_nodes[] = $h1;
+        $h1_texts[strtolower($text)] = $text;
+    }
+
+    $h1_count = count($h1_nodes);
+    if ($h1_count > 1 && count($h1_texts) > 1) {
+        $h1 = $h1_nodes[1];
+        $text = leanwi_acr_clean_text($h1->textContent);
+        $issues[] = leanwi_acr_issue(
+            'warning',
+            'Headings',
+            'Multiple H1 headings found inside the page content.',
+            'This scan found ' . $h1_count . ' H1 headings with different text in the editable content area.',
+            'Use one H1 for the page title, then H2 for main sections.',
+            'h1: ' . leanwi_acr_shorten($text, 80),
+            'headings',
+            leanwi_acr_node_locator($h1)
+        );
+    }
+
     foreach ($headings as $heading) {
+        if (leanwi_acr_is_hidden_content($heading)) {
+            continue;
+        }
+
         $level = intval(substr(strtolower($heading->nodeName), 1));
         $text = leanwi_acr_clean_text($heading->textContent);
         $element = 'h' . $level . ': ' . leanwi_acr_shorten($text, 80);
         $locator = leanwi_acr_node_locator($heading);
-
-        if ($level === 1 && $h1_count > 1) {
-            $issues[] = leanwi_acr_issue(
-                'warning',
-                'Headings',
-                'Multiple H1 headings found inside the page content.',
-                'This scan found ' . $h1_count . ' H1 headings in the editable content area.',
-                'Use one H1 for the page title, then H2 for main sections.',
-                $element,
-                'headings',
-                $locator
-            );
-        }
 
         if ($previous_level && $level > $previous_level + 1) {
             $issues[] = leanwi_acr_issue(
@@ -990,13 +1012,14 @@ function leanwi_acr_check_manual_lists($xpath, &$issues) {
 function leanwi_acr_check_color_cues($xpath, &$issues) {
     foreach ($xpath->query('//p|//li') as $node) {
         $text = leanwi_acr_clean_text($node->textContent);
-        if (preg_match('/\b(?:items?|fields?|links?|buttons?|text|rows?)\s+(?:in|marked|shown as|shown in)\s+(?:red|green|blue|yellow|orange|purple)\b|\bclick\s+(?:the\s+)?(?:red|green|blue|yellow|orange|purple)\b|\b(?:red|green|blue|yellow|orange|purple)\s+(?:button|link|text|box|row)\b/i', $text, $match)) {
+        $match_text = leanwi_acr_color_cue_match($text);
+        if ($match_text !== '') {
             $locator = leanwi_acr_node_locator($node);
             $issues[] = leanwi_acr_issue(
                 'fix',
                 'Color',
                 'Text may rely on color alone.',
-                'Found: "' . leanwi_acr_shorten($match[0], 120) . '"',
+                'Found: "' . leanwi_acr_shorten($match_text, 120) . '"',
                 'Do not use color as the only way to identify required items, status, or actions. Add text or icons too.',
                 $node->nodeName,
                 'color',
@@ -1004,6 +1027,22 @@ function leanwi_acr_check_color_cues($xpath, &$issues) {
             );
         }
     }
+}
+
+function leanwi_acr_color_cue_match($text) {
+    $patterns = [
+        '/\b(?:required\s+)?(?:items?|fields?|links?|buttons?|text|rows?|options?|answers?|choices?)\s+(?:are\s+)?(?:in|marked|shown|highlighted|colored|displayed)(?:\s+as|\s+in|\s+with)?\s+(?:red|green|blue|yellow|orange|purple)\b/i',
+        '/\b(?:click|select|choose|press|tap|use|open|follow)\s+(?:the\s+)?(?:red|green|blue|yellow|orange|purple)\s+(?:button|link|text|box|row|tab|icon)\b/i',
+        '/\b(?:click|select|choose|press|tap|use|open|follow)\s+(?:the\s+)?(?:button|link|text|box|row|tab|icon)\s+(?:in|marked|shown|highlighted|colored|displayed)(?:\s+as|\s+in|\s+with)?\s+(?:red|green|blue|yellow|orange|purple)\b/i',
+    ];
+
+    foreach ($patterns as $pattern) {
+        if (preg_match($pattern, $text, $match)) {
+            return $match[0];
+        }
+    }
+
+    return '';
 }
 
 function leanwi_acr_check_inline_contrast($xpath, &$issues) {
@@ -1095,7 +1134,12 @@ function leanwi_acr_render_post_report($post_report) {
         return $image;
     }, $post_report['ocr_images']);
     ?>
-    <section class="leanwi-focused-post" data-post-id="<?php echo esc_attr($post->ID); ?>">
+    <section
+        class="leanwi-focused-post"
+        data-post-id="<?php echo esc_attr($post->ID); ?>"
+        data-permalink="<?php echo esc_url($post_report['permalink']); ?>"
+        data-highlight-nonce="<?php echo esc_attr(wp_create_nonce('leanwi_acr_highlight_' . $post->ID)); ?>"
+    >
         <header class="leanwi-focused-post-header">
             <div>
                 <h2><?php echo esc_html($post_report['title'] ?: '(no title)'); ?></h2>
@@ -1357,21 +1401,68 @@ function leanwi_acr_tutorial_links() {
 }
 
 function leanwi_acr_get_image_source($image) {
-    foreach (['src', 'data-src', 'data-lazy-src'] as $attribute) {
+    foreach (['data-src', 'data-lazy-src', 'data-original', 'data-orig-file'] as $attribute) {
         $value = trim($image->getAttribute($attribute));
-        if ($value !== '') {
+        if (leanwi_acr_is_real_image_url($value)) {
             return leanwi_acr_absolute_url($value);
         }
     }
 
-    $srcset = trim($image->getAttribute('srcset'));
-    if ($srcset !== '') {
-        $first = trim(explode(',', $srcset)[0]);
-        $parts = preg_split('/\s+/', $first);
-        return leanwi_acr_absolute_url($parts[0] ?? '');
+    foreach (['data-srcset', 'srcset'] as $attribute) {
+        $value = leanwi_acr_source_from_srcset($image->getAttribute($attribute));
+        if (leanwi_acr_is_real_image_url($value)) {
+            return leanwi_acr_absolute_url($value);
+        }
+    }
+
+    $src = trim($image->getAttribute('src'));
+    if (leanwi_acr_is_real_image_url($src)) {
+        return leanwi_acr_absolute_url($src);
     }
 
     return '';
+}
+
+function leanwi_acr_source_from_srcset($srcset) {
+    $srcset = trim((string) $srcset);
+    if ($srcset === '') {
+        return '';
+    }
+
+    $best_url = '';
+    $best_size = -1;
+    foreach (explode(',', $srcset) as $candidate) {
+        $parts = preg_split('/\s+/', trim($candidate));
+        $url = $parts[0] ?? '';
+        if ($url === '') {
+            continue;
+        }
+
+        $descriptor = $parts[1] ?? '';
+        $size = 0;
+        if (preg_match('/^(\d+(?:\.\d+)?)(w|x)$/i', $descriptor, $match)) {
+            $size = (float) $match[1];
+            if (strtolower($match[2]) === 'x') {
+                $size *= 1000;
+            }
+        }
+
+        if ($size >= $best_size) {
+            $best_size = $size;
+            $best_url = $url;
+        }
+    }
+
+    return $best_url;
+}
+
+function leanwi_acr_is_real_image_url($url) {
+    $url = trim((string) $url);
+    if ($url === '' || stripos($url, 'data:') === 0 || stripos($url, 'blob:') === 0) {
+        return false;
+    }
+
+    return true;
 }
 
 function leanwi_acr_absolute_url($url) {
