@@ -1,12 +1,82 @@
 (function () {
-  function countWords(text) {
-    const matches = String(text || "").match(/[A-Za-z0-9][A-Za-z0-9'-]*/g);
-    return matches ? matches.length : 0;
-  }
-
   function shorten(text, limit) {
     const value = String(text || "").replace(/\s+/g, " ").trim();
     return value.length <= limit ? value : value.slice(0, limit - 1).trim() + "...";
+  }
+
+  function ocrTokens(text) {
+    const matches = String(text || "").match(/[A-Za-z0-9][A-Za-z0-9'’-]*/g);
+    return matches ? matches.map((token) => token.replace(/[’]/g, "'")) : [];
+  }
+
+  function isUsefulOcrToken(token) {
+    const value = String(token || "").replace(/^[-']+|[-']+$/g, "");
+    if (value.length < 2) {
+      return false;
+    }
+
+    const alphanumeric = value.replace(/[^A-Za-z0-9]/g, "");
+    if (alphanumeric.length < 2) {
+      return false;
+    }
+
+    if (alphanumeric.length / value.length < 0.75) {
+      return false;
+    }
+
+    return /[A-Za-z]/.test(alphanumeric) || /\d{2,}/.test(alphanumeric);
+  }
+
+  function average(values) {
+    const usable = values.filter((value) => Number.isFinite(value));
+    if (!usable.length) {
+      return null;
+    }
+    return usable.reduce((sum, value) => sum + value, 0) / usable.length;
+  }
+
+  function ocrWordConfidence(word) {
+    const value = Number(word && (word.confidence ?? word.conf));
+    return Number.isFinite(value) ? value : null;
+  }
+
+  function analyzeOcrData(data, minConfidence) {
+    const rawText = data && data.text ? data.text : "";
+    const rawTokens = ocrTokens(rawText).filter(isUsefulOcrToken);
+    const words = data && Array.isArray(data.words) ? data.words : [];
+    const confidentTokens = [];
+    const confidences = [];
+    const reliableConfidences = [];
+
+    words.forEach((word) => {
+      const confidence = ocrWordConfidence(word);
+      if (confidence !== null) {
+        confidences.push(confidence);
+      }
+
+      if (confidence === null || confidence < minConfidence) {
+        return;
+      }
+
+      ocrTokens(word && word.text).forEach((token) => {
+        if (isUsefulOcrToken(token)) {
+          confidentTokens.push(token);
+          reliableConfidences.push(confidence);
+        }
+      });
+    });
+
+    const usedConfidence = confidences.length > 0;
+    const reliableTokens = usedConfidence ? confidentTokens : rawTokens;
+
+    return {
+      wordCount: reliableTokens.length,
+      rawWordCount: rawTokens.length,
+      averageConfidence: usedConfidence ? average(reliableConfidences) : average(confidences),
+      usedConfidence,
+      sampleText: reliableTokens.join(" "),
+      rawText,
+    };
   }
 
   function sourceFromSrcset(srcset) {
@@ -224,7 +294,7 @@
     }
   }
 
-  function createOcrIssue(image, wordCount, text) {
+  function createOcrIssue(image, analysis) {
     const article = document.createElement("article");
     article.className = "leanwi-focused-issue leanwi-focused-review leanwi-focused-ocr-issue";
 
@@ -236,7 +306,10 @@
 
     const detail = document.createElement("p");
     detail.className = "leanwi-focused-detail";
-    detail.textContent = `OCR found about ${wordCount} words in this image. Sample: ${shorten(text, 180)}`;
+    const confidenceText =
+      analysis.averageConfidence === null ? "" : ` Average confidence: ${Math.round(analysis.averageConfidence)}%.`;
+    detail.textContent =
+      `OCR found about ${analysis.wordCount} reliable words in this image.${confidenceText} Sample: ${shorten(analysis.sampleText || analysis.rawText, 180)}`;
 
     const suggestion = document.createElement("p");
     suggestion.textContent =
@@ -276,7 +349,7 @@
       throw new Error("Tesseract.js did not load.");
     }
     const result = await window.Tesseract.recognize(image.src, "eng");
-    return result && result.data && result.data.text ? result.data.text : "";
+    return result && result.data ? result.data : { text: "" };
   }
 
   function getImageGroups() {
@@ -306,6 +379,7 @@
     const button = document.getElementById("leanwi-run-ocr");
     const status = document.getElementById("leanwi-ocr-status");
     const minWords = Number((window.leanwiFocusedReport && window.leanwiFocusedReport.ocrMinWords) || 10);
+    const minConfidence = Number((window.leanwiFocusedReport && window.leanwiFocusedReport.ocrMinConfidence) || 55);
 
     if (!button || !status) {
       return;
@@ -356,10 +430,10 @@
           const image = images[index];
           status.textContent = `Scanning ${index + 1} of ${images.length} images...`;
           try {
-            const text = await recognizeImage(image);
-            const wordCount = countWords(text);
-            if (wordCount >= minWords && image.group.resultsNode) {
-              image.group.resultsNode.appendChild(createOcrIssue(image, wordCount, text));
+            const data = await recognizeImage(image);
+            const analysis = analyzeOcrData(data, minConfidence);
+            if (analysis.wordCount >= minWords && image.group.resultsNode) {
+              image.group.resultsNode.appendChild(createOcrIssue(image, analysis));
               flagged += 1;
             }
           } catch (error) {
