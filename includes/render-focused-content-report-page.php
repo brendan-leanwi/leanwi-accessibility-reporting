@@ -1,7 +1,7 @@
 <?php
 
 if (!defined('LEANWI_ACR_ENGINE_VERSION')) {
-    define('LEANWI_ACR_ENGINE_VERSION', '1.3.6');
+    define('LEANWI_ACR_ENGINE_VERSION', '1.3.9');
 }
 
 function leanwi_render_focused_content_report_page() {
@@ -217,6 +217,7 @@ function leanwi_acr_render_content_for_scan($post) {
     $original_content = $post->post_content;
     $post->post_content = leanwi_acr_prepare_content_for_scan($original_content);
     $html = apply_filters('the_content', $post->post_content);
+    $html = leanwi_acr_add_unrendered_divi_heading_context($html);
     $post->post_content = $original_content;
     wp_reset_postdata();
     $GLOBALS['post'] = $previous_post;
@@ -227,6 +228,64 @@ function leanwi_acr_render_content_for_scan($post) {
 function leanwi_acr_prepare_content_for_scan($content) {
     $content = leanwi_acr_strip_ignored_shortcodes($content);
     return leanwi_acr_strip_fully_disabled_divi_shortcodes($content);
+}
+
+function leanwi_acr_add_unrendered_divi_heading_context($html) {
+    if (stripos((string) $html, '[et_pb_toggle') === false && stripos((string) $html, '[et_pb_accordion_item') === false) {
+        return $html;
+    }
+
+    return preg_replace_callback(
+        '/\[(et_pb_toggle|et_pb_accordion_item)\b([^\]]*)\](.*?)\[\/\1\]/is',
+        'leanwi_acr_add_unrendered_divi_heading_context_for_item',
+        (string) $html
+    );
+}
+
+function leanwi_acr_add_unrendered_divi_heading_context_for_item($matches) {
+    $attributes = leanwi_acr_parse_shortcode_attributes($matches[2] ?? '');
+    $title = leanwi_acr_clean_text($attributes['title'] ?? '');
+
+    if ($title === '') {
+        return $matches[0];
+    }
+
+    $level = leanwi_acr_divi_shortcode_title_level($attributes);
+    $heading = '<h' . $level . ' class="leanwi-acr-divi-shortcode-title">' . esc_html($title) . '</h' . $level . '>';
+
+    return $heading . $matches[0];
+}
+
+function leanwi_acr_parse_shortcode_attributes($attribute_text) {
+    $attributes = function_exists('shortcode_parse_atts')
+        ? shortcode_parse_atts((string) $attribute_text)
+        : [];
+
+    if (!is_array($attributes)) {
+        $attributes = [];
+    }
+
+    preg_match_all('/([A-Za-z0-9_\-]+)\s*=\s*(["\'])(.*?)\2/s', (string) $attribute_text, $matches, PREG_SET_ORDER);
+    foreach ($matches as $match) {
+        $attributes[strtolower($match[1])] = html_entity_decode($match[3], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    }
+
+    return $attributes;
+}
+
+function leanwi_acr_divi_shortcode_title_level($attributes) {
+    foreach (['title_level', 'title_tag', 'heading_level', 'title_heading_level'] as $key) {
+        if (empty($attributes[$key])) {
+            continue;
+        }
+
+        $value = strtolower(trim((string) $attributes[$key]));
+        if (preg_match('/^h?([1-6])$/', $value, $matches)) {
+            return (int) $matches[1];
+        }
+    }
+
+    return 2;
 }
 
 function leanwi_acr_strip_ignored_shortcodes($content) {
@@ -303,7 +362,7 @@ function leanwi_acr_check_headings($xpath, &$issues) {
     $previous_level = 0;
 
     foreach ($xpath->query('//h1') as $h1) {
-        if (leanwi_acr_is_hidden_content($h1)) {
+        if (leanwi_acr_is_hidden_content($h1) || leanwi_acr_is_generated_plugin_content($h1)) {
             continue;
         }
 
@@ -333,7 +392,7 @@ function leanwi_acr_check_headings($xpath, &$issues) {
     }
 
     foreach ($headings as $heading) {
-        if (leanwi_acr_is_hidden_content($heading)) {
+        if (leanwi_acr_is_hidden_content($heading) || leanwi_acr_is_generated_plugin_content($heading)) {
             continue;
         }
 
@@ -719,6 +778,19 @@ function leanwi_acr_is_hidden_content($node) {
         }
 
         if (leanwi_acr_has_all_device_hidden_classes($node)) {
+            return true;
+        }
+
+        $node = $node->parentNode;
+    }
+
+    return false;
+}
+
+function leanwi_acr_is_generated_plugin_content($node) {
+    while ($node instanceof DOMElement) {
+        $class = strtolower($node->getAttribute('class'));
+        if ($class !== '' && preg_match('/(^|\s)(tribe-events|tribe-common|tec-a11y-[^\s]+)(\s|$)/', $class)) {
             return true;
         }
 
