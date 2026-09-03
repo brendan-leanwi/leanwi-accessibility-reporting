@@ -1,7 +1,7 @@
 <?php
 
 if (!defined('LEANWI_ACR_ENGINE_VERSION')) {
-    define('LEANWI_ACR_ENGINE_VERSION', '1.3.9');
+    define('LEANWI_ACR_ENGINE_VERSION', '1.3.10');
 }
 
 function leanwi_render_focused_content_report_page() {
@@ -231,18 +231,42 @@ function leanwi_acr_prepare_content_for_scan($content) {
 }
 
 function leanwi_acr_add_unrendered_divi_heading_context($html) {
-    if (stripos((string) $html, '[et_pb_toggle') === false && stripos((string) $html, '[et_pb_accordion_item') === false) {
+    $shortcodes = leanwi_acr_unrendered_divi_title_shortcodes();
+    $has_supported_shortcode = false;
+
+    foreach (array_keys($shortcodes) as $shortcode) {
+        if (stripos((string) $html, '[' . $shortcode) !== false) {
+            $has_supported_shortcode = true;
+            break;
+        }
+    }
+
+    if (!$has_supported_shortcode) {
         return $html;
     }
 
+    $shortcode_pattern = implode('|', array_map('preg_quote', array_keys($shortcodes)));
+
     return preg_replace_callback(
-        '/\[(et_pb_toggle|et_pb_accordion_item)\b([^\]]*)\](.*?)\[\/\1\]/is',
-        'leanwi_acr_add_unrendered_divi_heading_context_for_item',
+        '/\[(' . $shortcode_pattern . ')\b([^\]]*)\](.*?)\[\/\1\]/is',
+        function ($matches) use ($shortcodes) {
+            return leanwi_acr_add_unrendered_divi_heading_context_for_item($matches, $shortcodes);
+        },
         (string) $html
     );
 }
 
-function leanwi_acr_add_unrendered_divi_heading_context_for_item($matches) {
+function leanwi_acr_unrendered_divi_title_shortcodes() {
+    return [
+        'et_pb_accordion_item' => 2,
+        'et_pb_cta' => 2,
+        'et_pb_promo' => 2,
+        'et_pb_toggle' => 2,
+    ];
+}
+
+function leanwi_acr_add_unrendered_divi_heading_context_for_item($matches, $shortcodes) {
+    $shortcode = strtolower($matches[1] ?? '');
     $attributes = leanwi_acr_parse_shortcode_attributes($matches[2] ?? '');
     $title = leanwi_acr_clean_text($attributes['title'] ?? '');
 
@@ -250,7 +274,7 @@ function leanwi_acr_add_unrendered_divi_heading_context_for_item($matches) {
         return $matches[0];
     }
 
-    $level = leanwi_acr_divi_shortcode_title_level($attributes);
+    $level = leanwi_acr_divi_shortcode_title_level($attributes, $shortcodes[$shortcode] ?? 2);
     $heading = '<h' . $level . ' class="leanwi-acr-divi-shortcode-title">' . esc_html($title) . '</h' . $level . '>';
 
     return $heading . $matches[0];
@@ -273,8 +297,8 @@ function leanwi_acr_parse_shortcode_attributes($attribute_text) {
     return $attributes;
 }
 
-function leanwi_acr_divi_shortcode_title_level($attributes) {
-    foreach (['title_level', 'title_tag', 'heading_level', 'title_heading_level'] as $key) {
+function leanwi_acr_divi_shortcode_title_level($attributes, $default_level = 2) {
+    foreach (['title_level', 'title_tag', 'heading_level', 'heading_tag', 'header_level', 'header_tag', 'title_heading_level'] as $key) {
         if (empty($attributes[$key])) {
             continue;
         }
@@ -285,7 +309,7 @@ function leanwi_acr_divi_shortcode_title_level($attributes) {
         }
     }
 
-    return 2;
+    return max(1, min(6, (int) $default_level));
 }
 
 function leanwi_acr_strip_ignored_shortcodes($content) {
