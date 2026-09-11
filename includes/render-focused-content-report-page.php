@@ -1,7 +1,7 @@
 <?php
 
 if (!defined('LEANWI_ACR_ENGINE_VERSION')) {
-    define('LEANWI_ACR_ENGINE_VERSION', '1.3.10');
+    define('LEANWI_ACR_ENGINE_VERSION', '1.3.12');
 }
 
 function leanwi_render_focused_content_report_page() {
@@ -218,6 +218,7 @@ function leanwi_acr_render_content_for_scan($post) {
     $post->post_content = leanwi_acr_prepare_content_for_scan($original_content);
     $html = apply_filters('the_content', $post->post_content);
     $html = leanwi_acr_add_unrendered_divi_heading_context($html);
+    $html = leanwi_acr_add_unrendered_divi_image_context($html);
     $post->post_content = $original_content;
     wp_reset_postdata();
     $GLOBALS['post'] = $previous_post;
@@ -295,6 +296,101 @@ function leanwi_acr_parse_shortcode_attributes($attribute_text) {
     }
 
     return $attributes;
+}
+
+function leanwi_acr_add_unrendered_divi_image_context($html) {
+    $shortcodes = leanwi_acr_unrendered_divi_image_shortcodes();
+    $has_supported_shortcode = false;
+
+    foreach (array_keys($shortcodes) as $shortcode) {
+        if (stripos((string) $html, '[' . $shortcode) !== false) {
+            $has_supported_shortcode = true;
+            break;
+        }
+    }
+
+    if (!$has_supported_shortcode) {
+        return $html;
+    }
+
+    $shortcode_pattern = implode('|', array_map('preg_quote', array_keys($shortcodes)));
+    $html = preg_replace_callback(
+        '/\[(' . $shortcode_pattern . ')\b([^\]]*)\](.*?)\[\/\1\]/is',
+        'leanwi_acr_add_unrendered_divi_image_context_for_item',
+        (string) $html
+    );
+
+    return preg_replace_callback(
+        '/\[(' . $shortcode_pattern . ')\b([^\]]*)\/\]/is',
+        'leanwi_acr_add_unrendered_divi_image_context_for_item',
+        $html
+    );
+}
+
+function leanwi_acr_unrendered_divi_image_shortcodes() {
+    return [
+        'et_pb_blurb' => ['image', 'src', 'image_url'],
+        'et_pb_image' => ['src', 'image', 'image_url'],
+    ];
+}
+
+function leanwi_acr_add_unrendered_divi_image_context_for_item($matches) {
+    $shortcode = strtolower($matches[1] ?? '');
+    $attributes = leanwi_acr_parse_shortcode_attributes($matches[2] ?? '');
+    $image_attributes = leanwi_acr_unrendered_divi_image_shortcodes();
+    $src = leanwi_acr_first_shortcode_attribute($attributes, $image_attributes[$shortcode] ?? []);
+
+    if ($src === '') {
+        return $matches[0];
+    }
+
+    $alt = leanwi_acr_first_existing_shortcode_attribute($attributes, ['alt', 'image_alt', 'alt_text']);
+    $title = leanwi_acr_clean_text($attributes['title'] ?? $attributes['admin_label'] ?? '');
+    $classes = trim('leanwi-acr-divi-shortcode-image leanwi-acr-divi-' . preg_replace('/[^a-z0-9_-]/', '', $shortcode));
+    $image = '<img class="' . esc_attr($classes) . '" src="' . esc_attr(leanwi_acr_absolute_url($src)) . '"';
+
+    if ($alt['exists']) {
+        $image .= ' alt="' . esc_attr(leanwi_acr_clean_text($alt['value'])) . '"';
+    }
+
+    if ($title !== '') {
+        $image .= ' data-leanwi-acr-divi-title="' . esc_attr($title) . '"';
+    }
+
+    $image .= ' />';
+
+    return $image . $matches[0];
+}
+
+function leanwi_acr_first_shortcode_attribute($attributes, $keys) {
+    foreach ($keys as $key) {
+        if (!isset($attributes[$key])) {
+            continue;
+        }
+
+        $value = trim((string) $attributes[$key]);
+        if ($value !== '') {
+            return $value;
+        }
+    }
+
+    return '';
+}
+
+function leanwi_acr_first_existing_shortcode_attribute($attributes, $keys) {
+    foreach ($keys as $key) {
+        if (array_key_exists($key, $attributes)) {
+            return [
+                'exists' => true,
+                'value' => (string) $attributes[$key],
+            ];
+        }
+    }
+
+    return [
+        'exists' => false,
+        'value' => '',
+    ];
 }
 
 function leanwi_acr_divi_shortcode_title_level($attributes, $default_level = 2) {
@@ -451,9 +547,14 @@ function leanwi_acr_check_images($xpath, &$issues, &$ocr_images) {
         $src = leanwi_acr_get_image_source($image);
         $alt_present = $image->hasAttribute('alt');
         $alt = leanwi_acr_clean_text($image->getAttribute('alt'));
+        if (leanwi_acr_is_hidden_content($image) || leanwi_acr_is_decorative_image($image, $alt)) {
+            continue;
+        }
+
         $element = 'img: ' . leanwi_acr_shorten($src, 100);
         $suspicious = leanwi_acr_is_suspicious_image($image, $src, $alt);
         $locator = leanwi_acr_node_locator($image);
+        $reported_empty_alt = false;
 
         if ($src && leanwi_acr_is_ocr_candidate($src)) {
             $ocr_images[] = [
@@ -464,28 +565,20 @@ function leanwi_acr_check_images($xpath, &$issues, &$ocr_images) {
             ];
         }
 
-        if (!$alt_present) {
+        if (!$alt_present || $alt === '') {
             $issues[] = leanwi_acr_issue(
                 'fix',
                 'Images',
-                'Image is missing alt text.',
-                'Image source: ' . leanwi_acr_shorten($src, 140),
-                'Add concise alt text, or mark the image decorative if it truly adds no information.',
+                'Image is missing meaningful alt text.',
+                $alt_present
+                    ? 'The image has an empty alt attribute. Image source: ' . leanwi_acr_shorten($src, 140)
+                    : 'Image source: ' . leanwi_acr_shorten($src, 140),
+                'Add concise alt text, or include the word decorative in the alt text if the image truly adds no information.',
                 $element,
                 'alt-text',
                 $locator
             );
-        } elseif ($alt === '' && $suspicious) {
-            $issues[] = leanwi_acr_issue(
-                'review',
-                'Images',
-                'Image looks like content but has empty alt text.',
-                'Image source: ' . leanwi_acr_shorten($src, 140),
-                'If this is a flyer, chart, map, schedule, or infographic, add nearby real text with the same information.',
-                $element,
-                'infographics',
-                $locator
-            );
+            $reported_empty_alt = true;
         } elseif ($alt !== '' && preg_match('/^(image|photo|picture|graphic|screenshot|img|dsc|untitled)([\s_-]?\d+)?$/i', $alt)) {
             $issues[] = leanwi_acr_issue(
                 'fix',
@@ -521,7 +614,7 @@ function leanwi_acr_check_images($xpath, &$issues, &$ocr_images) {
             );
         }
 
-        if ($suspicious && strlen($alt) < 40) {
+        if (!$reported_empty_alt && $suspicious && strlen($alt) < 40) {
             $issues[] = leanwi_acr_issue(
                 'review',
                 'Images',
@@ -1613,6 +1706,11 @@ function leanwi_acr_is_suspicious_image($image, $src, $alt) {
     $width = intval($image->getAttribute('width'));
     $height = intval($image->getAttribute('height'));
     return $width >= 500 && $height >= 250;
+}
+
+function leanwi_acr_is_decorative_image($image, $alt) {
+    return preg_match('/\bdecorative\b/i', (string) $alt) === 1
+        || in_array(strtolower($image->getAttribute('role')), ['presentation', 'none'], true);
 }
 
 function leanwi_acr_has_ancestor_tag($node, $tag) {
