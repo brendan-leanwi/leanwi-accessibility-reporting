@@ -256,6 +256,15 @@
       return false;
     }
 
+    const toggle = panel.closest(".et_pb_toggle, .et_pb_accordion_item");
+    if (toggle) {
+      const title = toggle.querySelector(".et_pb_toggle_title");
+      if (title) {
+        title.click();
+        return true;
+      }
+    }
+
     let control = null;
     if (panel.id) {
       control = Array.from(document.querySelectorAll("[aria-controls], a[href^='#']")).find((node) => {
@@ -282,6 +291,12 @@
   function forceVisiblePanel(panel) {
     if (!panel) {
       return;
+    }
+
+    const toggle = panel.closest(".et_pb_toggle, .et_pb_accordion_item");
+    if (toggle) {
+      toggle.classList.remove("et_pb_toggle_close");
+      toggle.classList.add("et_pb_toggle_open");
     }
 
     panel.hidden = false;

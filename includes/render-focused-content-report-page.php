@@ -1,7 +1,7 @@
 <?php
 
 if (!defined('LEANWI_ACR_ENGINE_VERSION')) {
-    define('LEANWI_ACR_ENGINE_VERSION', '1.3.12');
+    define('LEANWI_ACR_ENGINE_VERSION', '1.3.16');
 }
 
 function leanwi_render_focused_content_report_page() {
@@ -233,7 +233,7 @@ function leanwi_acr_prepare_content_for_scan($content) {
 
 function leanwi_acr_add_unrendered_divi_heading_context($html) {
     $shortcodes = leanwi_acr_unrendered_divi_title_shortcodes();
-    $has_supported_shortcode = false;
+    $has_supported_shortcode = stripos((string) $html, '[et_pb_accordion') !== false;
 
     foreach (array_keys($shortcodes) as $shortcode) {
         if (stripos((string) $html, '[' . $shortcode) !== false) {
@@ -245,6 +245,8 @@ function leanwi_acr_add_unrendered_divi_heading_context($html) {
     if (!$has_supported_shortcode) {
         return $html;
     }
+
+    $html = leanwi_acr_add_unrendered_divi_accordion_heading_context((string) $html);
 
     $shortcode_pattern = implode('|', array_map('preg_quote', array_keys($shortcodes)));
 
@@ -259,11 +261,43 @@ function leanwi_acr_add_unrendered_divi_heading_context($html) {
 
 function leanwi_acr_unrendered_divi_title_shortcodes() {
     return [
-        'et_pb_accordion_item' => 2,
         'et_pb_cta' => 2,
         'et_pb_promo' => 2,
-        'et_pb_toggle' => 2,
+        'et_pb_toggle' => 0,
     ];
+}
+
+function leanwi_acr_add_unrendered_divi_accordion_heading_context($html) {
+    if (stripos((string) $html, '[et_pb_accordion') === false) {
+        return $html;
+    }
+
+    return preg_replace_callback(
+        '/\[et_pb_accordion\b([^\]]*)\](.*?)\[\/et_pb_accordion\]/is',
+        function ($matches) {
+            $attributes = leanwi_acr_parse_shortcode_attributes($matches[1] ?? '');
+            $level = leanwi_acr_divi_shortcode_title_level($attributes, 0);
+            $inner = preg_replace_callback(
+                '/\[et_pb_accordion_item\b([^\]]*)\](.*?)\[\/et_pb_accordion_item\]/is',
+                function ($item_matches) use ($level) {
+                    $normalized_matches = [
+                        $item_matches[0] ?? '',
+                        'et_pb_accordion_item',
+                        $item_matches[1] ?? '',
+                        $item_matches[2] ?? '',
+                    ];
+
+                    return leanwi_acr_add_unrendered_divi_heading_context_for_item($normalized_matches, [
+                        'et_pb_accordion_item' => $level,
+                    ]);
+                },
+                $matches[2] ?? ''
+            );
+
+            return '[et_pb_accordion' . ($matches[1] ?? '') . ']' . $inner . '[/et_pb_accordion]';
+        },
+        (string) $html
+    );
 }
 
 function leanwi_acr_add_unrendered_divi_heading_context_for_item($matches, $shortcodes) {
@@ -271,14 +305,24 @@ function leanwi_acr_add_unrendered_divi_heading_context_for_item($matches, $shor
     $attributes = leanwi_acr_parse_shortcode_attributes($matches[2] ?? '');
     $title = leanwi_acr_clean_text($attributes['title'] ?? '');
 
-    if ($title === '') {
+    if ($title === '' || leanwi_acr_has_unrendered_divi_heading_marker($matches[0] ?? '')) {
         return $matches[0];
     }
 
     $level = leanwi_acr_divi_shortcode_title_level($attributes, $shortcodes[$shortcode] ?? 2);
-    $heading = '<h' . $level . ' class="leanwi-acr-divi-shortcode-title">' . esc_html($title) . '</h' . $level . '>';
+    if ($level < 1) {
+        return $matches[0];
+    }
 
-    return $heading . $matches[0];
+    $heading = '<h' . $level . ' class="leanwi-acr-divi-shortcode-title">' . esc_html($title) . '</h' . $level . '>';
+    $opening = '[' . ($matches[1] ?? '') . ($matches[2] ?? '') . ']';
+    $closing = '[/' . ($matches[1] ?? '') . ']';
+
+    return $opening . $heading . ($matches[3] ?? '') . $closing;
+}
+
+function leanwi_acr_has_unrendered_divi_heading_marker($html) {
+    return stripos((string) $html, 'leanwi-acr-divi-shortcode-title') !== false;
 }
 
 function leanwi_acr_parse_shortcode_attributes($attribute_text) {
@@ -405,6 +449,10 @@ function leanwi_acr_divi_shortcode_title_level($attributes, $default_level = 2) 
         }
     }
 
+    if ((int) $default_level < 1) {
+        return 0;
+    }
+
     return max(1, min(6, (int) $default_level));
 }
 
@@ -520,13 +568,14 @@ function leanwi_acr_check_headings($xpath, &$issues) {
         $text = leanwi_acr_clean_text($heading->textContent);
         $element = 'h' . $level . ': ' . leanwi_acr_shorten($text, 80);
         $locator = leanwi_acr_node_locator($heading);
+        $comparison_level = leanwi_acr_heading_comparison_level($heading, $previous_level);
 
-        if ($previous_level && $level > $previous_level + 1) {
+        if ($comparison_level && $level > $comparison_level + 1 && !leanwi_acr_is_divi_component_title_heading($heading)) {
             $issues[] = leanwi_acr_issue(
                 'fix',
                 'Headings',
                 'Heading levels jump out of order.',
-                'Found H' . $level . ' after H' . $previous_level . '.',
+                'Found H' . $level . ' after H' . $comparison_level . '.',
                 'Do not skip heading levels. For example, use H3 after H2, not H4.',
                 $element,
                 'headings',
@@ -538,6 +587,71 @@ function leanwi_acr_check_headings($xpath, &$issues) {
             $previous_level = $level;
         }
     }
+}
+
+function leanwi_acr_heading_comparison_level($heading, $previous_level) {
+    $divi_title_level = leanwi_acr_rendered_divi_toggle_title_level($heading);
+    if ($divi_title_level) {
+        return $divi_title_level;
+    }
+
+    return $previous_level;
+}
+
+function leanwi_acr_rendered_divi_toggle_title_level($heading) {
+    if (!($heading instanceof DOMElement)) {
+        return 0;
+    }
+
+    $content = leanwi_acr_nearest_ancestor_with_class($heading, 'et_pb_toggle_content');
+    if (!$content) {
+        return 0;
+    }
+
+    $sibling = $content->previousSibling;
+    while ($sibling) {
+        if ($sibling instanceof DOMElement) {
+            $tag = strtolower($sibling->nodeName);
+            if (preg_match('/^h([1-6])$/', $tag, $matches) && leanwi_acr_element_has_class($sibling, 'et_pb_toggle_title')) {
+                return (int) $matches[1];
+            }
+        }
+
+        $sibling = $sibling->previousSibling;
+    }
+
+    return 0;
+}
+
+function leanwi_acr_is_divi_component_title_heading($heading) {
+    if (!($heading instanceof DOMElement)) {
+        return false;
+    }
+
+    return leanwi_acr_element_has_class($heading, 'leanwi-acr-divi-shortcode-title')
+        || leanwi_acr_element_has_class($heading, 'et_pb_toggle_title');
+}
+
+function leanwi_acr_nearest_ancestor_with_class($node, $class_name) {
+    $parent = $node->parentNode;
+    while ($parent) {
+        if ($parent instanceof DOMElement && leanwi_acr_element_has_class($parent, $class_name)) {
+            return $parent;
+        }
+
+        $parent = $parent->parentNode;
+    }
+
+    return null;
+}
+
+function leanwi_acr_element_has_class($element, $class_name) {
+    if (!($element instanceof DOMElement)) {
+        return false;
+    }
+
+    $classes = preg_split('/\s+/', strtolower($element->getAttribute('class')));
+    return in_array(strtolower($class_name), $classes, true);
 }
 
 function leanwi_acr_check_images($xpath, &$issues, &$ocr_images) {
@@ -650,6 +764,10 @@ function leanwi_acr_check_links($xpath, &$issues) {
     $link_map = [];
 
     foreach ($links as $link) {
+        if (leanwi_acr_is_hidden_content($link) || leanwi_acr_is_generated_plugin_content($link)) {
+            continue;
+        }
+
         $href = trim($link->getAttribute('href'));
         if ($href === '' || strpos($href, '#') === 0 || preg_match('/^(mailto|tel|javascript|data):/i', $href)) {
             continue;
@@ -710,13 +828,18 @@ function leanwi_acr_check_links($xpath, &$issues) {
         }
 
         if ($text !== '') {
+            $normalized_href = leanwi_acr_normalized_link_destination($href);
+            if ($normalized_href === '') {
+                continue;
+            }
+
             if (!isset($link_map[$lower])) {
                 $link_map[$lower] = [
                     'hrefs' => [],
                     'locator' => $locator,
                 ];
             }
-            $link_map[$lower]['hrefs'][esc_url_raw($href)] = true;
+            $link_map[$lower]['hrefs'][$normalized_href] = true;
         }
     }
 
@@ -734,6 +857,27 @@ function leanwi_acr_check_links($xpath, &$issues) {
             );
         }
     }
+}
+
+function leanwi_acr_normalized_link_destination($href) {
+    $href = leanwi_acr_absolute_url($href);
+    $href = esc_url_raw($href);
+    if ($href === '') {
+        return '';
+    }
+
+    $parts = wp_parse_url($href);
+    if (!is_array($parts) || empty($parts['host'])) {
+        return strtolower(rtrim($href, '/'));
+    }
+
+    $scheme = strtolower($parts['scheme'] ?? 'https');
+    $host = strtolower($parts['host']);
+    $path = $parts['path'] ?? '';
+    $path = $path === '/' ? '/' : rtrim($path, '/');
+    $query = isset($parts['query']) && $parts['query'] !== '' ? '?' . $parts['query'] : '';
+
+    return $scheme . '://' . $host . $path . $query;
 }
 
 function leanwi_acr_has_named_duplicate_link($link, $href) {
@@ -1131,27 +1275,19 @@ function leanwi_acr_check_buttons($xpath, &$issues) {
 
 function leanwi_acr_check_media_embeds($xpath, &$issues) {
     foreach ($xpath->query('//iframe') as $iframe) {
-        $src = $iframe->getAttribute('src');
+        if (leanwi_acr_is_hidden_content($iframe) || leanwi_acr_is_generated_plugin_content($iframe)) {
+            continue;
+        }
+
+        $src = leanwi_acr_iframe_source($iframe);
         $locator = leanwi_acr_node_locator($iframe);
-        if (!$iframe->hasAttribute('title')) {
+        if (!leanwi_acr_iframe_has_title($iframe)) {
             $issues[] = leanwi_acr_issue(
                 'fix',
                 'Embeds',
                 'Embedded frame is missing a title.',
                 'Frame source: ' . leanwi_acr_shorten($src, 140),
                 'Add a short title that describes the embedded content, such as map, calendar, or video.',
-                'iframe',
-                'embeds',
-                $locator
-            );
-        }
-        if (preg_match('/calendar|maps|youtube|vimeo|facebook|twitter/i', $src)) {
-            $issues[] = leanwi_acr_issue(
-                'review',
-                'Embeds',
-                'Embedded third-party content may need review.',
-                'Frame source: ' . leanwi_acr_shorten($src, 140),
-                'Confirm the embed can be used with a keyboard and has an accessible name.',
                 'iframe',
                 'embeds',
                 $locator
@@ -1177,6 +1313,46 @@ function leanwi_acr_check_media_embeds($xpath, &$issues) {
         }
         $issues[] = leanwi_acr_issue('review', 'Media', 'Audio content may need a transcript.', 'Audio elements should have a nearby transcript when they include meaningful speech.', 'Confirm a transcript is available near the audio.', 'audio', 'media', $locator);
     }
+}
+
+function leanwi_acr_iframe_source($iframe) {
+    $src = leanwi_acr_trim_wrapping_quotes($iframe->getAttribute('src'));
+    if ($src !== '') {
+        return $src;
+    }
+
+    $raw = leanwi_acr_node_raw_html($iframe);
+    if (preg_match('~\bsrc\s*=\s*["\'\x{201c}\x{201d}\x{2018}\x{2019}]\s*([^"\'\x{201c}\x{201d}\x{2018}\x{2019}<>\s]+)~iu', $raw, $match)) {
+        return leanwi_acr_trim_wrapping_quotes(html_entity_decode($match[1], ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+    }
+
+    return leanwi_acr_extract_url_like($raw);
+}
+
+function leanwi_acr_iframe_has_title($iframe) {
+    if (leanwi_acr_clean_text(leanwi_acr_trim_wrapping_quotes($iframe->getAttribute('title'))) !== '') {
+        return true;
+    }
+
+    $raw = leanwi_acr_node_raw_html($iframe);
+    if (preg_match('~\btitle\s*=\s*["\'\x{201c}\x{201d}\x{2018}\x{2019}]\s*([^"\'\x{201c}\x{201d}\x{2018}\x{2019}<>]+)~iu', $raw, $match)) {
+        return leanwi_acr_clean_text(leanwi_acr_trim_wrapping_quotes(html_entity_decode($match[1], ENT_QUOTES | ENT_HTML5, 'UTF-8'))) !== '';
+    }
+
+    return false;
+}
+
+function leanwi_acr_trim_wrapping_quotes($value) {
+    return preg_replace('~^[\s"\'\x{201c}\x{201d}\x{2018}\x{2019}]+|[\s"\'\x{201c}\x{201d}\x{2018}\x{2019}]+$~u', '', (string) $value);
+}
+
+function leanwi_acr_node_raw_html($node) {
+    $html = '';
+    if ($node instanceof DOMElement && $node->ownerDocument) {
+        $html = (string) $node->ownerDocument->saveHTML($node);
+    }
+
+    return $html . ' ' . (string) $node->textContent;
 }
 
 function leanwi_acr_check_manual_lists($xpath, &$issues) {

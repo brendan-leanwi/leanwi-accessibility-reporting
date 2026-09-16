@@ -7,7 +7,7 @@ Plugin Name: LEANWI Accessibility Reporting
 GitHub URI:   https://github.com/brendan-leanwi/leanwi-accessibility-reporting
 Update URI:   https://github.com/brendan-leanwi/leanwi-accessibility-reporting
 Description: Functionality to aid reporting on accessibility for your entire site.
-Version: 1.3.12
+Version: 1.3.16
 Author: Brendan Tuckey
 Author URI:   https://github.com/brendan-leanwi
 License:      GPL2
@@ -20,7 +20,7 @@ Tested up to: 7.0.2
 // Define plugin constants
 define('LEANWI_AR_PATH', plugin_dir_path(__FILE__));
 define('LEANWI_AR_URL', plugin_dir_url(__FILE__));
-define('LEANWI_AR_VERSION', '1.3.12');
+define('LEANWI_AR_VERSION', '1.3.16');
 
 require_once LEANWI_AR_PATH . 'includes/db-setup.php';
 require_once LEANWI_AR_PATH . 'includes/render-site-scan-page.php';
