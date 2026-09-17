@@ -1,7 +1,7 @@
 <?php
 
 if (!defined('LEANWI_ACR_ENGINE_VERSION')) {
-    define('LEANWI_ACR_ENGINE_VERSION', '1.3.16');
+    define('LEANWI_ACR_ENGINE_VERSION', '1.3.17');
 }
 
 function leanwi_render_focused_content_report_page() {
@@ -849,7 +849,7 @@ function leanwi_acr_check_links($xpath, &$issues) {
                 'warning',
                 'Links',
                 'Same link text points to different places.',
-                'Link text "' . $text . '" goes to ' . count($data['hrefs']) . ' different destinations.',
+                leanwi_acr_duplicate_link_detail($text, array_keys($data['hrefs'])),
                 'Make each link label specific enough to distinguish its destination.',
                 'a',
                 'links',
@@ -857,6 +857,24 @@ function leanwi_acr_check_links($xpath, &$issues) {
             );
         }
     }
+}
+
+function leanwi_acr_duplicate_link_detail($text, $destinations) {
+    $destinations = array_values(array_filter(array_map('leanwi_acr_clean_text', (array) $destinations)));
+    $detail = 'Link text "' . $text . '" goes to ' . count($destinations) . ' different destinations.';
+
+    if (!empty($destinations)) {
+        $short_destinations = array_map(function ($destination) {
+            return leanwi_acr_shorten($destination, 120);
+        }, array_slice($destinations, 0, 4));
+        $detail .= ' Destinations: ' . implode(' | ', $short_destinations);
+
+        if (count($destinations) > count($short_destinations)) {
+            $detail .= ' | plus ' . (count($destinations) - count($short_destinations)) . ' more';
+        }
+    }
+
+    return $detail;
 }
 
 function leanwi_acr_normalized_link_destination($href) {
@@ -875,9 +893,31 @@ function leanwi_acr_normalized_link_destination($href) {
     $host = strtolower($parts['host']);
     $path = $parts['path'] ?? '';
     $path = $path === '/' ? '/' : rtrim($path, '/');
-    $query = isset($parts['query']) && $parts['query'] !== '' ? '?' . $parts['query'] : '';
+    $query = leanwi_acr_normalized_link_query($parts['query'] ?? '');
 
     return $scheme . '://' . $host . $path . $query;
+}
+
+function leanwi_acr_normalized_link_query($query) {
+    $query = trim((string) $query);
+    if ($query === '') {
+        return '';
+    }
+
+    parse_str($query, $params);
+    foreach (array_keys($params) as $key) {
+        $lower_key = strtolower((string) $key);
+        if (preg_match('/^utm_/', $lower_key) || in_array($lower_key, ['fbclid', 'gclid', 'msclkid', 'mc_cid', 'mc_eid', 'igshid'], true)) {
+            unset($params[$key]);
+        }
+    }
+
+    if (empty($params)) {
+        return '';
+    }
+
+    ksort($params);
+    return '?' . http_build_query($params, '', '&', PHP_QUERY_RFC3986);
 }
 
 function leanwi_acr_has_named_duplicate_link($link, $href) {
