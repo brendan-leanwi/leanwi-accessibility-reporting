@@ -1,7 +1,7 @@
 <?php
 
 if (!defined('LEANWI_ACR_ENGINE_VERSION')) {
-    define('LEANWI_ACR_ENGINE_VERSION', '1.3.17');
+    define('LEANWI_ACR_ENGINE_VERSION', '1.3.19');
 }
 
 function leanwi_render_focused_content_report_page() {
@@ -263,6 +263,7 @@ function leanwi_acr_unrendered_divi_title_shortcodes() {
     return [
         'et_pb_cta' => 2,
         'et_pb_promo' => 2,
+        'et_pb_tab' => 3,
         'et_pb_toggle' => 0,
     ];
 }
@@ -590,12 +591,114 @@ function leanwi_acr_check_headings($xpath, &$issues) {
 }
 
 function leanwi_acr_heading_comparison_level($heading, $previous_level) {
+    $divi_tab_title_level = leanwi_acr_rendered_divi_tab_title_level($heading);
+    if ($divi_tab_title_level) {
+        return $divi_tab_title_level;
+    }
+
     $divi_title_level = leanwi_acr_rendered_divi_toggle_title_level($heading);
     if ($divi_title_level) {
         return $divi_title_level;
     }
 
     return $previous_level;
+}
+
+function leanwi_acr_rendered_divi_tab_title_level($heading) {
+    if (!($heading instanceof DOMElement)) {
+        return 0;
+    }
+
+    $panel = leanwi_acr_nearest_ancestor_with_class($heading, 'et_pb_tab');
+    if (!$panel || leanwi_acr_has_earlier_heading_in_container($heading, $panel)) {
+        return 0;
+    }
+
+    $tabs = leanwi_acr_nearest_ancestor_with_class($panel, 'et_pb_tabs');
+    if (!$tabs) {
+        return 0;
+    }
+
+    $control = leanwi_acr_divi_tab_control($panel, $tabs);
+    if (!$control) {
+        return 0;
+    }
+
+    $rendered_level = leanwi_acr_heading_level_in_or_above_tab_control($control, $tabs);
+    if ($rendered_level) {
+        return $rendered_level;
+    }
+
+    // The bundled Divi tabs fix wraps standard tab links in H3 elements in the browser.
+    if (leanwi_acr_nearest_ancestor_with_class($control, 'et_pb_tabs_controls') || leanwi_acr_element_has_class($control, 'et_pb_tabs_controls')) {
+        return 3;
+    }
+
+    return 0;
+}
+
+function leanwi_acr_divi_tab_control($panel, $tabs) {
+    $label_ids = preg_split('/\s+/', trim($panel->getAttribute('aria-labelledby')));
+    foreach ($label_ids as $label_id) {
+        if ($label_id === '') {
+            continue;
+        }
+
+        foreach ($tabs->getElementsByTagName('*') as $candidate) {
+            if ($candidate instanceof DOMElement && $candidate->getAttribute('id') === $label_id) {
+                return $candidate;
+            }
+        }
+    }
+
+    $panel_classes = preg_split('/\s+/', strtolower($panel->getAttribute('class')));
+    foreach ($panel_classes as $panel_class) {
+        if (!preg_match('/^et_pb_tab_\d+$/', $panel_class)) {
+            continue;
+        }
+
+        foreach ($tabs->getElementsByTagName('li') as $candidate) {
+            if (leanwi_acr_element_has_class($candidate, $panel_class)
+                && leanwi_acr_nearest_ancestor_with_class($candidate, 'et_pb_tabs_controls')) {
+                return $candidate;
+            }
+        }
+    }
+
+    return null;
+}
+
+function leanwi_acr_heading_level_in_or_above_tab_control($control, $tabs) {
+    $node = $control;
+    while ($node instanceof DOMElement && $node !== $tabs) {
+        if (preg_match('/^h([1-6])$/', strtolower($node->nodeName), $matches)) {
+            return (int) $matches[1];
+        }
+
+        $node = $node->parentNode;
+    }
+
+    foreach ($control->getElementsByTagName('*') as $candidate) {
+        if ($candidate instanceof DOMElement && preg_match('/^h([1-6])$/', strtolower($candidate->nodeName), $matches)) {
+            return (int) $matches[1];
+        }
+    }
+
+    return 0;
+}
+
+function leanwi_acr_has_earlier_heading_in_container($heading, $container) {
+    foreach ($container->getElementsByTagName('*') as $candidate) {
+        if ($candidate === $heading) {
+            return false;
+        }
+
+        if ($candidate instanceof DOMElement && preg_match('/^h[1-6]$/', strtolower($candidate->nodeName))) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 function leanwi_acr_rendered_divi_toggle_title_level($heading) {
