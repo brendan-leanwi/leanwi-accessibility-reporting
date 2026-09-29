@@ -1,48 +1,61 @@
 document.addEventListener("DOMContentLoaded", function () {
   const accordions = document.querySelectorAll(".et_pb_accordion");
 
-  accordions.forEach((accordion, accIdx) => {
-    const toggles = accordion.querySelectorAll(".et_pb_toggle");
+  accordions.forEach((accordion, accordionIndex) => {
+    const items = [];
 
-    toggles.forEach((toggle, i) => {
+    accordion.querySelectorAll(".et_pb_accordion_item").forEach((toggle, itemIndex) => {
       const title = toggle.querySelector(".et_pb_toggle_title");
       const content = toggle.querySelector(".et_pb_toggle_content");
       if (!title || !content) return;
 
-      // IDs
-      const contentId = `accordion-${accIdx}-content-${i}`;
-      const headerId  = `accordion-${accIdx}-header-${i}`;
+      const contentId = `accordion-${accordionIndex}-content-${itemIndex}`;
+      const headerId = `accordion-${accordionIndex}-header-${itemIndex}`;
+      const titleText = title.textContent.trim();
+      let button = title.querySelector("button");
+
+      if (!button) {
+        button = document.createElement("button");
+        button.type = "button";
+        button.textContent = titleText;
+        title.textContent = "";
+        title.appendChild(button);
+      }
+
+      button.id = headerId;
+      button.setAttribute("aria-controls", contentId);
       content.id = contentId;
       content.setAttribute("role", "region");
       content.setAttribute("aria-labelledby", headerId);
-      content.hidden = !toggle.classList.contains("et_pb_toggle_open");
 
-      // Replace text with a <button> inside the heading
-      const text = title.textContent.trim();
-      title.textContent = "";
-      const button = document.createElement("button");
-      button.type = "button";
-      button.id = headerId;
-      button.textContent = text;
-      button.setAttribute("aria-controls", contentId);
-      button.setAttribute(
-        "aria-expanded",
-        toggle.classList.contains("et_pb_toggle_open") ? "true" : "false"
-      );
-      title.appendChild(button);
+      const item = { toggle, button, content };
+      items.push(item);
 
-      // Click handler
-      button.addEventListener("click", () => {
-        const expanded = button.getAttribute("aria-expanded") === "true";
+      button.addEventListener("click", function (event) {
+        event.preventDefault();
+        event.stopPropagation();
 
-        // Toggle this panel only
-        button.setAttribute("aria-expanded", expanded ? "false" : "true");
-        content.hidden = expanded;
+        const willExpand = button.getAttribute("aria-expanded") !== "true";
+        if (willExpand) {
+          items.forEach((otherItem) => {
+            if (otherItem !== item) setExpanded(otherItem, false);
+          });
+        }
 
-        // Sync Divi classes for styling
-        toggle.classList.toggle("et_pb_toggle_open", !expanded);
-        toggle.classList.toggle("et_pb_toggle_close", expanded);
+        setExpanded(item, willExpand);
       });
     });
+
+    items.forEach((item) => {
+      setExpanded(item, item.toggle.classList.contains("et_pb_toggle_open"));
+    });
   });
+
+  function setExpanded(item, expanded) {
+    item.button.setAttribute("aria-expanded", expanded ? "true" : "false");
+    item.content.hidden = !expanded;
+    item.content.style.display = expanded ? "block" : "none";
+    item.toggle.classList.toggle("et_pb_toggle_open", expanded);
+    item.toggle.classList.toggle("et_pb_toggle_close", !expanded);
+  }
 });

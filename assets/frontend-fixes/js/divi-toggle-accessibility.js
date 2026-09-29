@@ -1,5 +1,5 @@
 document.addEventListener("DOMContentLoaded", function () {
-  const toggles = document.querySelectorAll(".et_pb_toggle");
+  const toggles = document.querySelectorAll(".et_pb_toggle:not(.et_pb_accordion_item)");
 
   toggles.forEach((toggle, i) => {
     const title = toggle.querySelector(".et_pb_toggle_title");
