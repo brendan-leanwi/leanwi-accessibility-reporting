@@ -52,6 +52,9 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function activate(e) {
+    // Allow the hours popup to handle its own activation.
+    if (e.target.closest('#leanwi-tooltip-button')) return;
+    
     var hash = getHashFromElement(e.target);
     if (!hash) return;
 

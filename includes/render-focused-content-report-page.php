@@ -1,7 +1,7 @@
 <?php
 
 if (!defined('LEANWI_ACR_ENGINE_VERSION')) {
-    define('LEANWI_ACR_ENGINE_VERSION', '1.3.20');
+    define('LEANWI_ACR_ENGINE_VERSION', '1.3.23');
 }
 
 function leanwi_render_focused_content_report_page() {
@@ -228,7 +228,12 @@ function leanwi_acr_render_content_for_scan($post) {
 
 function leanwi_acr_prepare_content_for_scan($content) {
     $content = leanwi_acr_strip_ignored_shortcodes($content);
-    return leanwi_acr_strip_fully_disabled_divi_shortcodes($content);
+    $content = leanwi_acr_strip_fully_disabled_divi_shortcodes($content);
+    return leanwi_acr_strip_noncontent_code($content);
+}
+
+function leanwi_acr_strip_noncontent_code($content) {
+    return preg_replace('/<(script|style)\b[^>]*>.*?<\/\1\s*>/is', '', (string) $content);
 }
 
 function leanwi_acr_add_unrendered_divi_heading_context($html) {
@@ -261,6 +266,8 @@ function leanwi_acr_add_unrendered_divi_heading_context($html) {
 
 function leanwi_acr_unrendered_divi_title_shortcodes() {
     return [
+        'et_pb_heading' => 2,
+        'et_pb_blurb' => 4,
         'et_pb_cta' => 2,
         'et_pb_promo' => 2,
         'et_pb_tab' => 3,
@@ -516,7 +523,7 @@ function leanwi_acr_load_html($html) {
 
     $document = new DOMDocument();
     $previous = libxml_use_internal_errors(true);
-    $wrapped = '<div id="leanwi-acr-root">' . $html . '</div>';
+    $wrapped = '<div id="leanwi-acr-root">' . leanwi_acr_strip_noncontent_code($html) . '</div>';
     $loaded = $document->loadHTML('<?xml encoding="utf-8" ?>' . $wrapped, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
     libxml_clear_errors();
     libxml_use_internal_errors($previous);
