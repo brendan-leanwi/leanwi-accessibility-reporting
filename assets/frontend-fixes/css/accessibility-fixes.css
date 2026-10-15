@@ -37,3 +37,34 @@
   color: #FFF;
   border-color: #4b6734;
 }
+
+/* Fix extra carousel arrows error */
+/* Circular carousel buttons */
+.dsm_blog_carousel_0 .swiper-arrow-button {
+    border-radius: 50% !important;
+    width: 40px !important;
+    height: 40px !important;
+    box-sizing: border-box !important;
+    background-color: transparent !important;
+    background-position: center !important;
+    background-repeat: no-repeat !important;
+    background-size: 12px 20px !important;
+}
+
+/* Disable every font-generated arrow */
+.dsm_blog_carousel_0 .swiper-arrow-button::before,
+.dsm_blog_carousel_0 .swiper-arrow-button::after {
+    content: none !important;
+    display: none !important;
+}
+
+/* Previous: use the working next-arrow image, then flip everything */
+.dsm_blog_carousel_0 .swiper-button-prev {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 20'%3E%3Cpath d='M2 2L10 10L2 18' fill='none' stroke='%231461a0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important;
+    transform: translateY(-50%) scaleX(-1) !important;
+}
+
+/* Next arrow */
+.dsm_blog_carousel_0 .swiper-button-next {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 20'%3E%3Cpath d='M2 2L10 10L2 18' fill='none' stroke='%231461a0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important;
+}
