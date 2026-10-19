@@ -1,7 +1,7 @@
 <?php
 
 if (!defined('LEANWI_ACR_ENGINE_VERSION')) {
-    define('LEANWI_ACR_ENGINE_VERSION', '1.3.23');
+    define('LEANWI_ACR_ENGINE_VERSION', '1.3.25');
 }
 
 function leanwi_render_focused_content_report_page() {
@@ -216,6 +216,7 @@ function leanwi_acr_render_content_for_scan($post) {
     setup_postdata($post);
     $original_content = $post->post_content;
     $post->post_content = leanwi_acr_prepare_content_for_scan($original_content);
+    $post->post_content = leanwi_acr_add_unrendered_divi_heading_context($post->post_content);
     $html = apply_filters('the_content', $post->post_content);
     $html = leanwi_acr_add_unrendered_divi_heading_context($html);
     $html = leanwi_acr_add_unrendered_divi_image_context($html);
@@ -446,7 +447,7 @@ function leanwi_acr_first_existing_shortcode_attribute($attributes, $keys) {
 }
 
 function leanwi_acr_divi_shortcode_title_level($attributes, $default_level = 2) {
-    foreach (['title_level', 'title_tag', 'heading_level', 'heading_tag', 'header_level', 'header_tag', 'title_heading_level'] as $key) {
+    foreach (['title_level', 'title_tag', 'heading_level', 'heading_tag', 'header_level', 'header_tag', 'title_heading_level', 'toggle_title_level', 'accordion_item_title_level'] as $key) {
         if (empty($attributes[$key])) {
             continue;
         }
